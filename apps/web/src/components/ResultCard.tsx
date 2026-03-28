@@ -1,7 +1,7 @@
-import type { SearchResponse } from "../lib/api";
+import type { ScoutRecommendation } from "../lib/api";
 
 interface ResultCardProps {
-  listing: SearchResponse["listings"][number];
+  listing: ScoutRecommendation;
 }
 
 export function ResultCard({ listing }: ResultCardProps) {
@@ -9,75 +9,41 @@ export function ResultCard({ listing }: ResultCardProps) {
     <article className="result-card">
       <div className="result-header">
         <div>
-          <p className="eyebrow">{listing.area}</p>
+          <p className="eyebrow">{listing.vacancyStatus ?? "Preschool match"}</p>
           <h3>{listing.name}</h3>
         </div>
         <div className="score-pill">
-          <span>kiascore</span>
-          <strong>{listing.valueScore}</strong>
+          <span>match</span>
+          <strong>{listing.highlights.length}</strong>
         </div>
       </div>
 
-      <p className="blurb">{listing.parentBlurb}</p>
+      <p className="blurb">{listing.reason}</p>
 
       <div className="metric-grid">
         <div>
           <span>Monthly fee</span>
-          <strong>S${listing.monthlyFee}</strong>
+          <strong>{listing.monthlyFee ? `S$${listing.monthlyFee}` : "Check school"}</strong>
         </div>
         <div>
-          <span>Distance</span>
-          <strong>{listing.distanceKm} km</strong>
+          <span>Programme levels</span>
+          <strong>{listing.programmeLevels.slice(0, 2).join(", ") || "See details"}</strong>
         </div>
         <div>
-          <span>Rating</span>
-          <strong>
-            {listing.rating}/5 ({listing.reviewCount})
-          </strong>
-        </div>
-        <div>
-          <span>Class size</span>
-          <strong>{listing.classSize} students</strong>
+          <span>Vacancy</span>
+          <strong>{listing.vacancyStatus ?? "Check directly"}</strong>
         </div>
       </div>
 
       <div className="tag-row">
-        {listing.subjects.map((subject) => (
-          <span className="tag" key={subject}>
-            {subject}
-          </span>
-        ))}
-        {listing.tags.map((tag) => (
-          <span className="tag tag-muted" key={tag}>
-            {tag}
+        {listing.highlights.map((highlight) => (
+          <span className="tag" key={highlight}>
+            {highlight}
           </span>
         ))}
       </div>
 
       <p className="address-line">{listing.address}</p>
-
-      <dl className="breakdown">
-        <div>
-          <dt>Affordability</dt>
-          <dd>{listing.scoreBreakdown.affordability}</dd>
-        </div>
-        <div>
-          <dt>Distance</dt>
-          <dd>{listing.scoreBreakdown.distance}</dd>
-        </div>
-        <div>
-          <dt>Reviews</dt>
-          <dd>{listing.scoreBreakdown.reviews}</dd>
-        </div>
-        <div>
-          <dt>Class size</dt>
-          <dd>{listing.scoreBreakdown.classSize}</dd>
-        </div>
-        <div>
-          <dt>Subject fit</dt>
-          <dd>{listing.scoreBreakdown.relevance}</dd>
-        </div>
-      </dl>
     </article>
   );
 }

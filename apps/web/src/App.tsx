@@ -1,28 +1,32 @@
 import { useState } from "react";
 import { ResultCard } from "./components/ResultCard";
 import { SearchForm, type SearchDraft } from "./components/SearchForm";
-import { refreshListings, searchListings, type RefreshResponse, type SearchResponse } from "./lib/api";
+import {
+  refreshBase,
+  scout,
+  streamEnrichmentLive,
+  type EnrichmentLiveEvent,
+  type RefreshBaseResponse,
+  type ScoutResult
+} from "./lib/api";
 import { parseSearchDraft } from "./lib/intent";
 
 const defaultDraft: SearchDraft = {
-  brief: "My P6 child needs affordable math tuition near Tampines with good reviews and a monthly budget below $320.",
+  brief: "",
   postalCode: "",
   subject: "",
   maxMonthlyFee: ""
 };
 
 export default function App() {
-  const [results, setResults] = useState<SearchResponse | null>(null);
-  const [refreshResult, setRefreshResult] = useState<RefreshResponse | null>(null);
-  const [intentSummary, setIntentSummary] = useState(defaultDraft.brief);
-  const [intentTags, setIntentTags] = useState<string[]>([]);
+  const [results, setResults] = useState<ScoutResult | null>(null);
+  const [refreshResult, setRefreshResult] = useState<RefreshBaseResponse | { message: string } | null>(null);
+  const [intentSummary, setIntentSummary] = useState("");
   const [lastDraft, setLastDraft] = useState<SearchDraft | null>(null);
+  const [enrichmentEvents, setEnrichmentEvents] = useState<EnrichmentLiveEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const compactIntent =
-    intentSummary.length > 88 ? `${intentSummary.slice(0, 85).trimEnd()}...` : intentSummary;
 
   async function runSearch(draft: SearchDraft) {
     setLoading(true);
@@ -30,16 +34,42 @@ export default function App() {
 
     try {
       const parsed = parseSearchDraft(draft);
-      const response = await searchListings(parsed.payload);
+      const response = await scout(parsed.query);
       setResults(response);
       setIntentSummary(parsed.summary);
-      setIntentTags(parsed.tags);
       setLastDraft(draft);
     } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : "Unable to search listings.");
+      setError(searchError instanceof Error ? searchError.message : "Unable to scout schools.");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function runLiveEnrichmentRefresh() {
+    setEnrichmentEvents([]);
+
+    return await new Promise<{ message: string }>((resolve, reject) => {
+      let completedPayload: EnrichmentLiveEvent | null = null;
+
+      const close = streamEnrichmentLive({
+        onEvent: (event) => {
+          setEnrichmentEvents((current) => [...current, event]);
+          if (event.type === "complete") {
+            completedPayload = event;
+          }
+        },
+        onError: (message) => {
+          close();
+          reject(new Error(message));
+        },
+        onDone: () => {
+          close();
+          resolve({
+            message: completedPayload?.message ?? "Enrichment refresh completed."
+          });
+        }
+      });
+    });
   }
 
   async function handleRefresh() {
@@ -47,52 +77,57 @@ export default function App() {
     setError(null);
 
     try {
-      const response = await refreshListings();
-      setRefreshResult(response);
+      const baseResult = await refreshBase();
+      const enrichmentResult = await runLiveEnrichmentRefresh();
+      setRefreshResult({
+        message: `${baseResult.message} ${enrichmentResult.message}`
+      });
+
       if (lastDraft) {
         await runSearch(lastDraft);
       }
     } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : "Unable to refresh listings.");
+      setError(refreshError instanceof Error ? refreshError.message : "Unable to refresh school data.");
     } finally {
       setRefreshing(false);
     }
   }
+
+  const leadRecommendation = results?.recommendations[0] ?? null;
+  const backupRecommendation = results?.recommendations[1] ?? null;
 
   return (
     <main className="page-shell">
       <section className="brand-banner">
         <div>
           <p className="brand-mark">Kiaskool</p>
-          <p className="brand-subtitle">For the parent who wants every tuition dollar to work harder.</p>
+          <p className="brand-subtitle">For the parent who wants every preschool decision to feel simpler.</p>
         </div>
         <div className="brand-badges">
           <span>Singapore-first</span>
-          <span>Kiasu but rational</span>
-          <span>AI shortlist scout</span>
+          <span>Intent-led</span>
+          <span>Cache-backed scout</span>
         </div>
       </section>
 
       <section className="hero-card">
-        <p className="eyebrow">Singapore tuition discovery, sharpened</p>
-        <h1>Kiaskool scouts the right tuition centre before parents start stress-scrolling.</h1>
+        <p className="eyebrow">Singapore preschool discovery</p>
+        <h1>Kiaskool turns a parent brief into a shortlist from cached school data.</h1>
         <p className="hero-copy">
-          Start with a natural-language brief on what the child needs. Kiaskool interprets the intent first, then lets
-          parents open up postal code, budget, and subject filters only if they want more control.
+          Search stays fast by querying the local school cache. Refresh pulls fresh ECDA base data first, then TinyFish
+          enriches school websites in the background.
         </p>
 
         <SearchForm initialValues={defaultDraft} loading={loading} onSubmit={runSearch} />
 
         <div className="action-row">
-          <button className="secondary-button" disabled={refreshing} onClick={handleRefresh} type="button">
+          <button className="secondary-button" disabled={refreshing || loading} onClick={handleRefresh} type="button">
             {refreshing ? "Refreshing..." : "Refresh scraped listings"}
           </button>
           {results ? (
-            <p className="status-line">
-              Scouting around <strong>{results.query.resolvedArea}</strong> for {results.query.subject ?? "all subjects"}
-            </p>
+            <p className="status-line">Scout completed from cached schools for: <strong>{intentSummary}</strong></p>
           ) : (
-            <p className="status-line">Start with the student brief. Fine-grain filters are optional.</p>
+            <p className="status-line">Start with the student brief. Refresh data when you want newer school coverage.</p>
           )}
         </div>
 
@@ -100,49 +135,73 @@ export default function App() {
         {error ? <p className="error-text">{error}</p> : null}
       </section>
 
+      {enrichmentEvents.length > 0 ? (
+        <section className="scrape-panel">
+          <div className="scrape-header">
+            <div>
+              <p className="eyebrow">TinyFish enrichment refresh</p>
+              <h2>Live website enrichment is running.</h2>
+            </div>
+            <p className="scrape-count">{enrichmentEvents.length} updates</p>
+          </div>
+          <div className="scrape-feed">
+            {enrichmentEvents.map((event, index) => (
+              <article className={`scrape-event scrape-${event.type}`} key={`${event.type}-${index}-${event.message}`}>
+                <p className="scrape-type">{event.type}</p>
+                <p className="scrape-message">{event.message}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {results ? (
         <section className="content-grid">
           <aside className="insight-card">
-            <p className="eyebrow">{results.recommendation.generatedByAI ? "Kiaskool decision" : "Kiaskool quick pick"}</p>
+            <p className="eyebrow">Kiaskool decision</p>
             <div className="decision-badge">1 clear winner</div>
-            <h2>{results.recommendation.headline}</h2>
-            <p className="decision-subheadline">{results.recommendation.subheadline}</p>
-            <p className="intent-summary">You asked for: {compactIntent}</p>
+            <h2>{leadRecommendation ? `Best match: ${leadRecommendation.name}` : "No strong match yet"}</h2>
+            <p className="decision-subheadline">{leadRecommendation?.reason ?? "No preschool matched this brief closely enough."}</p>
+            <p className="intent-summary">You asked for: {intentSummary || "No brief provided yet."}</p>
             <div className="intent-tag-row">
-              {intentTags.map((tag) => (
-                <span className="intent-tag" key={tag}>
-                  {tag}
+              {Object.entries(results.filters).map(([key, value]) => (
+                <span className="intent-tag" key={key}>
+                  {`${key}: ${Array.isArray(value) ? value.join(", ") : value}`}
                 </span>
               ))}
             </div>
-            <div className="fit-pill">{results.recommendation.whyThisFits}</div>
+            <div className="fit-pill">
+              {leadRecommendation?.programmeLevels.length
+                ? `Programme fit: ${leadRecommendation.programmeLevels.slice(0, 2).join(", ")}`
+                : "Programme fit derived from ECDA data"}
+            </div>
             <ul className="proof-list">
-              {results.recommendation.proofPoints.map((point) => (
+              {(leadRecommendation?.highlights ?? ["Refresh base and enrichment data for a fuller shortlist."]).map((point) => (
                 <li key={point}>{point}</li>
               ))}
             </ul>
             <div className="backup-card">
               <p className="backup-label">Backup option</p>
-              <p>{results.recommendation.backupOption}</p>
+              <p>{backupRecommendation ? `${backupRecommendation.name}: ${backupRecommendation.reason}` : "No backup recommendation yet."}</p>
             </div>
-            <p className="action-note">{results.recommendation.primaryActionNote}</p>
-            <p className="meta-line">Model: {results.recommendation.model}</p>
+            <p className="action-note">
+              {leadRecommendation ? "Review the top recommendation first, then compare one backup only." : "Try a more specific parent brief or refresh the data cache."}
+            </p>
           </aside>
 
           <section className="results-column">
-            {results.listings.map((listing) => (
-              <ResultCard key={listing.id} listing={listing} />
+            {results.recommendations.map((listing) => (
+              <ResultCard key={`${listing.name}-${listing.address}`} listing={listing} />
             ))}
           </section>
         </section>
       ) : (
         <section className="empty-state-card">
           <p className="eyebrow">How it works</p>
-          <h2>Describe the student's needs first. Kiaskool turns that into the search direction.</h2>
+          <h2>Describe the child’s needs first. Kiaskool scouts the cache, not the live web.</h2>
           <p>
-            The current app infers subject, area, and budget from the brief, then ranks tuition centres. The next
-            backend step is to pass the same intent into the TinyFish scrape planner so data collection follows the
-            parent's actual wording.
+            ECDA base data fills the school cache. TinyFish adds website enrichment only during refresh. Search stays
+            fast because the scout agent reads SQLite, not a live scrape.
           </p>
         </section>
       )}

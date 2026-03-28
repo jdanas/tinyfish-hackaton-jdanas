@@ -1,8 +1,10 @@
 import cors from "cors";
 import express from "express";
 import { config } from "./config.js";
-import { getListingCount } from "./db/database.js";
+import { getSchoolCount, initDb } from "./data/schoolStore.js";
 import { listingsRouter } from "./routes/listings.js";
+
+initDb();
 
 const app = express();
 
@@ -12,7 +14,7 @@ app.use(express.json());
 app.get("/health", (_request, response) => {
   response.json({
     ok: true,
-    listings: getListingCount()
+    listings: getSchoolCount()
   });
 });
 

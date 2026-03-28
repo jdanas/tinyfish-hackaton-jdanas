@@ -22,5 +22,5 @@ export const config = {
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
   geminiBaseUrl:
     process.env.GEMINI_BASE_URL ??
-    "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "https://generativelanguage.googleapis.com/v1beta/openai/"
 };

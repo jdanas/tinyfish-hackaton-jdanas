@@ -36,8 +36,14 @@ export function SearchForm({ loading, initialValues, onSubmit }: SearchFormProps
     });
   }
 
-  function applyPrompt(prompt: string) {
+  async function applyPrompt(prompt: string) {
     setBrief(prompt);
+    await onSubmit({
+      brief: prompt,
+      postalCode,
+      subject,
+      maxMonthlyFee
+    });
   }
 
   return (
@@ -56,7 +62,13 @@ export function SearchForm({ loading, initialValues, onSubmit }: SearchFormProps
         </p>
         <div className="prompt-row">
           {quickPrompts.map((prompt) => (
-            <button className="prompt-chip" key={prompt} onClick={() => applyPrompt(prompt)} type="button">
+            <button
+              className="prompt-chip"
+              disabled={loading}
+              key={prompt}
+              onClick={() => void applyPrompt(prompt)}
+              type="button"
+            >
               {prompt}
             </button>
           ))}

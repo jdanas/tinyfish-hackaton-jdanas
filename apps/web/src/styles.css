@@ -293,6 +293,66 @@ textarea {
   margin-top: 1.25rem;
 }
 
+.scrape-panel {
+  margin-top: 1.25rem;
+  padding: 1.3rem;
+  border-radius: 28px;
+  border: 1px solid rgba(26, 23, 19, 0.08);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.scrape-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: end;
+}
+
+.scrape-header h2 {
+  margin: 0.35rem 0 0;
+  font-size: 1.6rem;
+  line-height: 1.05;
+}
+
+.scrape-count {
+  margin: 0;
+  color: rgba(26, 23, 19, 0.62);
+}
+
+.scrape-feed {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.scrape-event {
+  padding: 0.9rem 1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(26, 23, 19, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.scrape-type {
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #8c5233;
+}
+
+.scrape-message {
+  margin: 0.35rem 0 0;
+  color: rgba(26, 23, 19, 0.82);
+}
+
+.scrape-complete {
+  background: rgba(13, 95, 67, 0.08);
+}
+
+.scrape-failed {
+  background: rgba(179, 63, 45, 0.08);
+}
+
 .empty-state-card {
   margin-top: 1.25rem;
   padding: 1.6rem;
@@ -519,7 +579,8 @@ textarea {
 
 @media (max-width: 900px) {
   .brand-banner,
-  .finegrain-header {
+  .finegrain-header,
+  .scrape-header {
     flex-direction: column;
     align-items: start;
   }
