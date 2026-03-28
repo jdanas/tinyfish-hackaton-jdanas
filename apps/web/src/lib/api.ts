@@ -12,8 +12,12 @@ export interface SearchResponse {
     resolvedArea: string;
   };
   recommendation: {
-    summary: string;
-    highlights: string[];
+    headline: string;
+    subheadline: string;
+    whyThisFits: string;
+    proofPoints: string[];
+    backupOption: string;
+    primaryActionNote: string;
     generatedByAI: boolean;
     model: string;
   };
@@ -80,4 +84,3 @@ export function refreshListings() {
     method: "POST"
   });
 }
-

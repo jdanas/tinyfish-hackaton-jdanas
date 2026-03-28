@@ -21,6 +21,9 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const compactIntent =
+    intentSummary.length > 88 ? `${intentSummary.slice(0, 85).trimEnd()}...` : intentSummary;
+
   async function runSearch(draft: SearchDraft) {
     setLoading(true);
     setError(null);
@@ -100,9 +103,11 @@ export default function App() {
       {results ? (
         <section className="content-grid">
           <aside className="insight-card">
-            <p className="eyebrow">{results.recommendation.generatedByAI ? "Kiaskool AI read" : "Kiaskool shortlist read"}</p>
-            <h2>{results.recommendation.summary}</h2>
-            <p className="intent-summary">{intentSummary}</p>
+            <p className="eyebrow">{results.recommendation.generatedByAI ? "Kiaskool decision" : "Kiaskool quick pick"}</p>
+            <div className="decision-badge">1 clear winner</div>
+            <h2>{results.recommendation.headline}</h2>
+            <p className="decision-subheadline">{results.recommendation.subheadline}</p>
+            <p className="intent-summary">You asked for: {compactIntent}</p>
             <div className="intent-tag-row">
               {intentTags.map((tag) => (
                 <span className="intent-tag" key={tag}>
@@ -110,11 +115,17 @@ export default function App() {
                 </span>
               ))}
             </div>
-            <ul>
-              {results.recommendation.highlights.map((highlight) => (
-                <li key={highlight}>{highlight}</li>
+            <div className="fit-pill">{results.recommendation.whyThisFits}</div>
+            <ul className="proof-list">
+              {results.recommendation.proofPoints.map((point) => (
+                <li key={point}>{point}</li>
               ))}
             </ul>
+            <div className="backup-card">
+              <p className="backup-label">Backup option</p>
+              <p>{results.recommendation.backupOption}</p>
+            </div>
+            <p className="action-note">{results.recommendation.primaryActionNote}</p>
             <p className="meta-line">Model: {results.recommendation.model}</p>
           </aside>
 

@@ -288,7 +288,7 @@ textarea {
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
   gap: 1.25rem;
   margin-top: 1.25rem;
 }
@@ -318,15 +318,36 @@ textarea {
   height: fit-content;
   position: sticky;
   top: 1rem;
+  background: linear-gradient(180deg, rgba(255, 248, 236, 0.96), rgba(255, 255, 255, 0.9));
 }
 
 .insight-card h2 {
-  margin: 0.6rem 0;
-  font-size: 1.4rem;
-  line-height: 1.2;
+  margin: 0.55rem 0 0.45rem;
+  font-size: 1.9rem;
+  line-height: 1.05;
+}
+
+.decision-badge {
+  display: inline-flex;
+  margin-top: 0.7rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  background: #1a1713;
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.decision-subheadline {
+  margin: 0;
+  font-size: 1.02rem;
+  color: rgba(26, 23, 19, 0.8);
 }
 
 .intent-summary {
+  margin-top: 0.9rem;
   color: rgba(26, 23, 19, 0.72);
 }
 
@@ -337,9 +358,49 @@ textarea {
   margin-bottom: 1rem;
 }
 
-.insight-card ul {
+.fit-pill {
+  display: inline-flex;
+  margin-bottom: 0.9rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(13, 95, 67, 0.1);
+  color: #0d5f43;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.proof-list {
+  margin: 0 0 1rem;
   padding-left: 1.1rem;
   color: rgba(26, 23, 19, 0.78);
+}
+
+.proof-list li + li {
+  margin-top: 0.55rem;
+}
+
+.backup-card {
+  padding: 0.95rem 1rem;
+  border-radius: 20px;
+  background: rgba(26, 23, 19, 0.05);
+}
+
+.backup-card p {
+  margin: 0;
+}
+
+.backup-label {
+  margin-bottom: 0.35rem !important;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #8c5233;
+}
+
+.action-note {
+  margin: 0.95rem 0 0;
+  font-weight: 700;
+  color: #1a1713;
 }
 
 .results-column {
@@ -349,6 +410,7 @@ textarea {
 
 .result-card {
   padding: 1.35rem;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .result-header {
