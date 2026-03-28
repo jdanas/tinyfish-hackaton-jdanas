@@ -1,7 +1,7 @@
 /**
  * TinyFish enrichment layer. Scrapes school websites for qualitative data and writes enrichment rows only.
  */
-import { TinyFish } from "@tiny-fish/sdk";
+import { BrowserProfile, TinyFish } from "@tiny-fish/sdk";
 import { config } from "../config.js";
 import { upsertEnrichedSchools } from "../data/schoolStore.js";
 import type { BaseSchool, EnrichedSchool } from "../types/school.js";
@@ -72,22 +72,65 @@ async function scrapeSingleSchool(
     message: `Opening ${school.name} website`
   });
 
-  const stream = await client.agent.stream({
-    url: websiteUrl,
-    goal: `Extract structured preschool enrichment details from this school website.
-    Return strict JSON with:
-    - curriculum_style
-    - enrichment_programmes
-    - open_house_dates
-    - ethos_summary
-
-    Keep ethos_summary to 1 or 2 sentences.`
+  console.log("[TINYFISH] Opening website.", {
+    school: school.name,
+    websiteUrl
   });
+
+  const stream = await client.agent.stream(
+    {
+      url: websiteUrl,
+      browser_profile: BrowserProfile.STEALTH,
+      goal: `Extract structured preschool enrichment details from this school website.
+      Return strict JSON with:
+      - curriculum_style
+      - enrichment_programmes
+      - open_house_dates
+      - ethos_summary
+
+      Keep ethos_summary to 1 or 2 sentences.`
+    },
+    {
+      onStarted: (event) => {
+        console.log("[TINYFISH] Run started.", {
+          school: school.name,
+          runId: event.run_id
+        });
+      },
+      onStreamingUrl: (event) => {
+        console.log("[TINYFISH] Live browser URL.", {
+          school: school.name,
+          streamingUrl: event.streaming_url
+        });
+      },
+      onProgress: (event) => {
+        console.log("[TINYFISH] Progress callback.", {
+          school: school.name,
+          purpose: event.purpose
+        });
+      },
+      onComplete: (event) => {
+        console.log("[TINYFISH] Run complete callback.", {
+          school: school.name,
+          status: event.status
+        });
+      }
+    }
+  );
 
   let resultPayload: ScrapedEnrichment | null = null;
 
   for await (const event of stream) {
+    console.log("[TINYFISH] Stream event.", {
+      school: school.name,
+      type: event.type
+    });
+
     if (event.type === "PROGRESS" && "purpose" in event) {
+      console.log("[TINYFISH] Progress event.", {
+        school: school.name,
+        purpose: event.purpose
+      });
       onEvent?.({
         type: "progress",
         message: `${school.name}: ${event.purpose}`
@@ -96,8 +139,14 @@ async function scrapeSingleSchool(
 
     if (event.type === "COMPLETE") {
       if (event.status === "COMPLETED" && event.result) {
+        console.log("[TINYFISH] Completed with result.", {
+          school: school.name
+        });
         resultPayload = event.result as ScrapedEnrichment;
       } else if (event.status === "FAILED") {
+        console.log("[TINYFISH] Completed with failure.", {
+          school: school.name
+        });
         onEvent?.({
           type: "progress",
           message: `${school.name}: skipped due to scrape failure`
@@ -131,7 +180,8 @@ export async function enrichSchools(
   }
 
   const client = new TinyFish({
-    apiKey: config.tinyfishApiKey
+    apiKey: config.tinyfishApiKey,
+    timeout: 600_000
   });
 
   const enrichedRows: EnrichedSchool[] = [];
