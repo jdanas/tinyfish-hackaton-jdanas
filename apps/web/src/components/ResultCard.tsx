@@ -12,7 +12,10 @@ export function ResultCard({ listing }: ResultCardProps) {
           <p className="eyebrow">{listing.area}</p>
           <h3>{listing.name}</h3>
         </div>
-        <div className="score-pill">{listing.valueScore}</div>
+        <div className="score-pill">
+          <span>kiascore</span>
+          <strong>{listing.valueScore}</strong>
+        </div>
       </div>
 
       <p className="blurb">{listing.parentBlurb}</p>
@@ -51,6 +54,8 @@ export function ResultCard({ listing }: ResultCardProps) {
         ))}
       </div>
 
+      <p className="address-line">{listing.address}</p>
+
       <dl className="breakdown">
         <div>
           <dt>Affordability</dt>
@@ -76,4 +81,3 @@ export function ResultCard({ listing }: ResultCardProps) {
     </article>
   );
 }
-
