@@ -16,6 +16,17 @@ type DatastoreResponse<T> = {
   };
 };
 
+type DatasetRowsResponse<T> = {
+  code?: number;
+  errorMsg?: string;
+  data?: {
+    rows?: T[];
+    links?: {
+      next?: string;
+    };
+  };
+};
+
 type CentresRecord = {
   centre_code?: string;
   centre_name?: string;
@@ -59,6 +70,55 @@ type GeoJsonResponse = {
   features?: GeoJsonFeature[];
 };
 
+const MAX_RETRIES = 4;
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function parseJsonResponse<T>(response: Response, context: string): Promise<T> {
+  const contentType = response.headers.get("content-type") ?? "";
+  const raw = await response.text();
+
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new Error(
+      `${context} returned non-JSON content (${contentType || "unknown"}): ${raw.slice(0, 200)}`
+    );
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    throw new Error(
+      `${context} returned invalid JSON: ${error instanceof Error ? error.message : "parse failure"}`
+    );
+  }
+}
+
+async function fetchWithRetry(url: string, context: string, init?: RequestInit): Promise<Response> {
+  let attempt = 0;
+
+  while (true) {
+    const response = await fetch(url, init);
+
+    if (response.status !== 429) {
+      return response;
+    }
+
+    attempt += 1;
+
+    if (attempt > MAX_RETRIES) {
+      throw new Error(`${context} hit rate limits after ${MAX_RETRIES} retries.`);
+    }
+
+    const retryAfterSeconds = Number(response.headers.get("retry-after") ?? "0");
+    const backoffMs = retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : 1000 * 2 ** (attempt - 1);
+
+    console.warn(`[ECDA] 429 rate limit on ${context}. Retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES}).`);
+    await delay(backoffMs);
+  }
+}
+
 function normalizeText(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -68,20 +128,39 @@ function buildSchoolKey(name: string, postalCode: string) {
 }
 
 async function fetchAllDatastoreRecords<T>(datasetId: string): Promise<T[]> {
+  try {
+    return await fetchViaDatastoreSearch<T>(datasetId);
+  } catch (primaryError) {
+    console.warn(
+      `[ECDA] datastore_search failed for ${datasetId}, falling back to list-rows:`,
+      primaryError
+    );
+    return fetchViaListRows<T>(datasetId);
+  }
+}
+
+async function fetchViaDatastoreSearch<T>(datasetId: string): Promise<T[]> {
   const records: T[] = [];
   let offset = 0;
   const limit = 1000;
 
   while (true) {
-    const response = await fetch(
-      `https://data.gov.sg/api/action/datastore_search?resource_id=${datasetId}&limit=${limit}&offset=${offset}`
+    const url = `https://data.gov.sg/api/action/datastore_search?resource_id=${datasetId}&limit=${limit}&offset=${offset}`;
+    const response = await fetchWithRetry(
+      url,
+      `ECDA datastore_search ${datasetId}`
     );
 
     if (!response.ok) {
-      throw new Error(`ECDA dataset fetch failed for ${datasetId}.`);
+      throw new Error(
+        `ECDA datastore_search failed for ${datasetId} with ${response.status} ${response.statusText}.`
+      );
     }
 
-    const payload = (await response.json()) as DatastoreResponse<T>;
+    const payload = await parseJsonResponse<DatastoreResponse<T>>(
+      response,
+      `ECDA datastore_search ${datasetId}`
+    );
     const batch = payload.result?.records ?? [];
     records.push(...batch);
 
@@ -95,29 +174,82 @@ async function fetchAllDatastoreRecords<T>(datasetId: string): Promise<T[]> {
   return records;
 }
 
+async function fetchViaListRows<T>(datasetId: string): Promise<T[]> {
+  const records: T[] = [];
+  let nextUrl:
+    | string
+    | null = `https://api-production.data.gov.sg/v2/public/api/datasets/${encodeURIComponent(datasetId)}/list-rows`;
+
+  while (nextUrl) {
+    const response = await fetchWithRetry(nextUrl, `ECDA list-rows ${datasetId}`, {
+      headers: {
+        Accept: "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `ECDA list-rows failed for ${datasetId} with ${response.status} ${response.statusText}.`
+      );
+    }
+
+    const payload = await parseJsonResponse<DatasetRowsResponse<T>>(
+      response,
+      `ECDA list-rows ${datasetId}`
+    );
+
+    if (payload.code && payload.code !== 1) {
+      throw new Error(
+        payload.errorMsg || `ECDA list-rows returned error code ${payload.code} for ${datasetId}.`
+      );
+    }
+
+    records.push(...(payload.data?.rows ?? []));
+
+    const next = payload.data?.links?.next;
+    nextUrl = next
+      ? next.startsWith("http")
+        ? next
+        : `https://api-production.data.gov.sg${next}`
+      : null;
+  }
+
+  return records;
+}
+
 async function fetchLocations(): Promise<Map<string, { latitude: number | null; longitude: number | null }>> {
-  const pollResponse = await fetch(
-    `https://api-open.data.gov.sg/v1/public/api/datasets/${PRESCHOOLS_LOCATION_DATASET_ID}/poll-download`
+  const pollResponse = await fetchWithRetry(
+    `https://api-open.data.gov.sg/v1/public/api/datasets/${PRESCHOOLS_LOCATION_DATASET_ID}/poll-download`,
+    `ECDA poll-download ${PRESCHOOLS_LOCATION_DATASET_ID}`
   );
 
   if (!pollResponse.ok) {
     throw new Error("ECDA preschool location poll-download failed.");
   }
 
-  const pollPayload = (await pollResponse.json()) as PollDownloadResponse;
+  const pollPayload = await parseJsonResponse<PollDownloadResponse>(
+    pollResponse,
+    `ECDA poll-download ${PRESCHOOLS_LOCATION_DATASET_ID}`
+  );
   const downloadUrl = pollPayload.data?.url;
 
   if (!downloadUrl) {
     throw new Error("ECDA preschool location download URL missing.");
   }
 
-  const geoResponse = await fetch(downloadUrl);
+  const geoResponse = await fetchWithRetry(
+    downloadUrl,
+    `ECDA location download ${PRESCHOOLS_LOCATION_DATASET_ID}`
+  );
 
   if (!geoResponse.ok) {
     throw new Error("ECDA preschool location download failed.");
   }
 
-  const geoPayload = (await geoResponse.json()) as GeoJsonResponse;
+  const geoPayload = await parseJsonResponse<GeoJsonResponse>(
+    geoResponse,
+    `ECDA location download ${PRESCHOOLS_LOCATION_DATASET_ID}`
+  );
   const locations = new Map<string, { latitude: number | null; longitude: number | null }>();
 
   for (const feature of geoPayload.features ?? []) {
@@ -172,11 +304,9 @@ function deriveVacancyStatus(record: CentresRecord) {
 }
 
 export async function fetchAndStoreEcdaData(): Promise<void> {
-  const [centres, services, locations] = await Promise.all([
-    fetchAllDatastoreRecords<CentresRecord>(LISTING_OF_CENTRES_DATASET_ID),
-    fetchAllDatastoreRecords<ServicesRecord>(LISTING_OF_CENTRE_SERVICES_DATASET_ID),
-    fetchLocations()
-  ]);
+  const centres = await fetchAllDatastoreRecords<CentresRecord>(LISTING_OF_CENTRES_DATASET_ID);
+  const services = await fetchAllDatastoreRecords<ServicesRecord>(LISTING_OF_CENTRE_SERVICES_DATASET_ID);
+  const locations = await fetchLocations();
 
   const servicesByCentreCode = new Map<string, ServicesRecord[]>();
 
@@ -233,4 +363,3 @@ export async function fetchAndStoreEcdaData(): Promise<void> {
 
   upsertBaseSchools(schools);
 }
-

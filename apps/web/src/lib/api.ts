@@ -57,10 +57,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   });
 
-  const data = (await response.json()) as T & { error?: string };
+  const raw = await response.text();
+  const contentType = response.headers.get("content-type") ?? "";
+  const isJson = contentType.toLowerCase().includes("application/json");
+  const data = (isJson && raw ? (JSON.parse(raw) as T & { error?: string }) : undefined);
 
-  if (!response.ok && data.error) {
-    throw new Error(data.error);
+  if (!response.ok) {
+    if (data && "error" in data && data.error) {
+      throw new Error(data.error);
+    }
+
+    throw new Error(
+      raw || `Request failed with ${response.status} ${response.statusText}.`
+    );
+  }
+
+  if (!data) {
+    throw new Error(`Expected JSON response from ${path} but received ${contentType || "empty response"}.`);
   }
 
   return data;
@@ -129,4 +142,3 @@ export function streamEnrichmentLive(
 
   return () => source.close();
 }
-

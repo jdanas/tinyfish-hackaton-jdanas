@@ -6,9 +6,18 @@ async function request(path, init) {
             ...(init?.headers ?? {})
         }
     });
-    const data = (await response.json());
-    if (!response.ok && data.error) {
-        throw new Error(data.error);
+    const raw = await response.text();
+    const contentType = response.headers.get("content-type") ?? "";
+    const isJson = contentType.toLowerCase().includes("application/json");
+    const data = (isJson && raw ? JSON.parse(raw) : undefined);
+    if (!response.ok) {
+        if (data && "error" in data && data.error) {
+            throw new Error(data.error);
+        }
+        throw new Error(raw || `Request failed with ${response.status} ${response.statusText}.`);
+    }
+    if (!data) {
+        throw new Error(`Expected JSON response from ${path} but received ${contentType || "empty response"}.`);
     }
     return data;
 }
