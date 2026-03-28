@@ -37,6 +37,12 @@ export function refreshEnrichment() {
         method: "POST"
     });
 }
+export function enrichTopMatch(query) {
+    return request("/api/scout/enrich-top", {
+        method: "POST",
+        body: JSON.stringify({ query })
+    });
+}
 export function getSchools() {
     return request("/api/schools");
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ResultCard } from "./components/ResultCard";
 import { SearchForm, type SearchDraft } from "./components/SearchForm";
 import {
+  enrichTopMatch,
   refreshBase,
   scout,
   streamEnrichmentLive,
@@ -30,6 +31,7 @@ export default function App() {
   >([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [enrichingTop, setEnrichingTop] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function runSearch(draft: SearchDraft) {
@@ -103,6 +105,31 @@ export default function App() {
       );
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function handleEnrichTopMatch() {
+    if (!results?.query) {
+      return;
+    }
+
+    setEnrichingTop(true);
+    setError(null);
+
+    try {
+      const response = await enrichTopMatch(results.query);
+      setResults(response.result);
+      setRefreshResult({
+        message: response.message
+      });
+    } catch (enrichError) {
+      setError(
+        enrichError instanceof Error
+          ? enrichError.message
+          : "Unable to enrich the top match.",
+      );
+    } finally {
+      setEnrichingTop(false);
     }
   }
 
@@ -240,6 +267,14 @@ export default function App() {
                   : "No backup recommendation yet."}
               </p>
             </div>
+            <button
+              className="secondary-button"
+              disabled={enrichingTop || loading || refreshing || !leadRecommendation}
+              onClick={() => void handleEnrichTopMatch()}
+              type="button"
+            >
+              {enrichingTop ? "Enriching top match..." : "Enrich top match"}
+            </button>
             <p className="action-note">
               {leadRecommendation
                 ? "Review the top recommendation first, then compare one backup only."

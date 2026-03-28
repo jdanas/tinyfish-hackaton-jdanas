@@ -408,15 +408,27 @@ function deriveVacancyStatus(record: CentresRecord) {
 
 export async function fetchAndStoreEcdaData(): Promise<void> {
   const prototypeLimit = config.ecdaPrototypeLimit > 0 ? config.ecdaPrototypeLimit : 50;
+  console.log("[ECDA] Base refresh started.", {
+    prototypeLimit
+  });
   const centres = await fetchAllDatastoreRecords<CentresRecord>(
     LISTING_OF_CENTRES_DATASET_ID,
     prototypeLimit
   );
+  console.log("[ECDA] Centres fetched.", {
+    count: centres.length
+  });
   const services = await fetchAllDatastoreRecords<ServicesRecord>(
     LISTING_OF_CENTRE_SERVICES_DATASET_ID,
     prototypeLimit
   );
+  console.log("[ECDA] Services fetched.", {
+    count: services.length
+  });
   const locations = await fetchLocations();
+  console.log("[ECDA] Locations fetched.", {
+    count: locations.size
+  });
 
   const servicesByCentreCode = new Map<string, ServicesRecord[]>();
 
@@ -472,4 +484,7 @@ export async function fetchAndStoreEcdaData(): Promise<void> {
     });
 
   upsertBaseSchools(schools);
+  console.log("[ECDA] Base refresh stored.", {
+    schools: schools.length
+  });
 }

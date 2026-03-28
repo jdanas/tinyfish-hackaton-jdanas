@@ -2,7 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState } from "react";
 import { ResultCard } from "./components/ResultCard";
 import { SearchForm } from "./components/SearchForm";
-import { refreshBase, scout, streamEnrichmentLive, } from "./lib/api";
+import { enrichTopMatch, refreshBase, scout, streamEnrichmentLive, } from "./lib/api";
 import { parseSearchDraft } from "./lib/intent";
 const defaultDraft = {
     brief: "",
@@ -18,6 +18,7 @@ export default function App() {
     const [enrichmentEvents, setEnrichmentEvents] = useState([]);
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [enrichingTop, setEnrichingTop] = useState(false);
     const [error, setError] = useState(null);
     async function runSearch(draft) {
         setLoading(true);
@@ -84,6 +85,28 @@ export default function App() {
             setRefreshing(false);
         }
     }
+    async function handleEnrichTopMatch() {
+        if (!results?.query) {
+            return;
+        }
+        setEnrichingTop(true);
+        setError(null);
+        try {
+            const response = await enrichTopMatch(results.query);
+            setResults(response.result);
+            setRefreshResult({
+                message: response.message
+            });
+        }
+        catch (enrichError) {
+            setError(enrichError instanceof Error
+                ? enrichError.message
+                : "Unable to enrich the top match.");
+        }
+        finally {
+            setEnrichingTop(false);
+        }
+    }
     const leadRecommendation = results?.recommendations[0] ?? null;
     const backupRecommendation = results?.recommendations[1] ?? null;
     return (_jsxs("main", { className: "page-shell", children: [_jsxs("section", { className: "brand-banner", children: [_jsxs("div", { children: [_jsx("p", { className: "brand-mark", children: "Kiaskool" }), _jsx("p", { className: "brand-subtitle", children: "For the parent who wants every preschool decision to feel simpler." })] }), _jsxs("div", { className: "brand-badges", children: [_jsx("span", { children: "Singapore-first" }), _jsx("span", { children: "Intent-led" }), _jsx("span", { children: "Cache-backed scout" })] })] }), _jsxs("section", { className: "hero-card", children: [_jsx("p", { className: "eyebrow", children: "Singapore preschool discovery" }), _jsx("h1", { children: "Kiaskool scouts the right tuition centre before parents start stress-scrolling.." }), _jsx("p", { className: "hero-copy", children: "Search stays fast by querying the local school cache. Refresh pulls fresh ECDA base data first, then TinyFish enriches school websites in the background." }), _jsx(SearchForm, { initialValues: defaultDraft, loading: loading, onSubmit: runSearch }), _jsxs("div", { className: "action-row", children: [_jsx("button", { className: "secondary-button", disabled: refreshing || loading, onClick: handleRefresh, type: "button", children: refreshing ? "Refreshing..." : "Refresh scraped listings" }), results ? (_jsxs("p", { className: "status-line", children: ["Scout completed from cached schools for:", " ", _jsx("strong", { children: intentSummary })] })) : (_jsx("p", { className: "status-line", children: "Start with the student brief. Refresh data when you want newer school coverage." }))] }), refreshResult ? (_jsx("p", { className: "notice", children: refreshResult.message })) : null, error ? _jsx("p", { className: "error-text", children: error }) : null] }), enrichmentEvents.length > 0 ? (_jsxs("section", { className: "scrape-panel", children: [_jsxs("div", { className: "scrape-header", children: [_jsxs("div", { children: [_jsx("p", { className: "eyebrow", children: "TinyFish enrichment refresh" }), _jsx("h2", { children: "Live website enrichment is running." })] }), _jsxs("p", { className: "scrape-count", children: [enrichmentEvents.length, " updates"] })] }), _jsx("div", { className: "scrape-feed", children: enrichmentEvents.map((event, index) => (_jsxs("article", { className: `scrape-event scrape-${event.type}`, children: [_jsx("p", { className: "scrape-type", children: event.type }), _jsx("p", { className: "scrape-message", children: event.message })] }, `${event.type}-${index}-${event.message}`))) })] })) : null, results ? (_jsxs("section", { className: "content-grid", children: [_jsxs("aside", { className: "insight-card", children: [_jsx("p", { className: "eyebrow", children: "Kiaskool decision" }), _jsx("div", { className: "decision-badge", children: "1 clear winner" }), _jsx("h2", { children: leadRecommendation
@@ -95,7 +118,7 @@ export default function App() {
                                     "Refresh base and enrichment data for a fuller shortlist.",
                                 ]).map((point) => (_jsx("li", { children: point }, point))) }), _jsxs("div", { className: "backup-card", children: [_jsx("p", { className: "backup-label", children: "Backup option" }), _jsx("p", { children: backupRecommendation
                                             ? `${backupRecommendation.name}: ${backupRecommendation.reason}`
-                                            : "No backup recommendation yet." })] }), _jsx("p", { className: "action-note", children: leadRecommendation
+                                            : "No backup recommendation yet." })] }), _jsx("button", { className: "secondary-button", disabled: enrichingTop || loading || refreshing || !leadRecommendation, onClick: () => void handleEnrichTopMatch(), type: "button", children: enrichingTop ? "Enriching top match..." : "Enrich top match" }), _jsx("p", { className: "action-note", children: leadRecommendation
                                     ? "Review the top recommendation first, then compare one backup only."
                                     : "Try a more specific parent brief or refresh the data cache." })] }), _jsx("section", { className: "results-column", children: results.recommendations.map((listing) => (_jsx(ResultCard, { listing: listing }, `${listing.name}-${listing.address}`))) })] })) : (_jsxs("section", { className: "empty-state-card", children: [_jsx("p", { className: "eyebrow", children: "How it works" }), _jsx("h2", { children: "Describe the child\u2019s needs first. Kiaskool scouts the cache, not the live web." }), _jsx("p", { children: "ECDA base data fills the school cache. TinyFish adds website enrichment only during refresh. Search stays fast because the scout agent reads SQLite, not a live scrape." })] }))] }));
 }

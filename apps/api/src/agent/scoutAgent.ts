@@ -6,6 +6,7 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { querySchools } from "../data/schoolStore.js";
 import { enrichSchools, normalizeWebsiteUrl } from "../scraper/tinyfishScraper.js";
+import type { BaseSchool } from "../types/school.js";
 import type { SchoolFilters, ScoutRecommendation, ScoutResult } from "../types/school.js";
 
 const filtersSchema = z.object({
@@ -26,6 +27,8 @@ const recommendationsSchema = z.object({
     })
   ).max(3)
 });
+
+type RecommendationDraft = z.infer<typeof recommendationsSchema>["recommendations"][number];
 
 const filtersAgent = new Agent({
   name: "Kiaskool Scout Filters",
@@ -54,6 +57,46 @@ function cleanFilters(filters: SchoolFilters): SchoolFilters {
   ) as SchoolFilters;
 }
 
+function logScout(message: string, details?: object) {
+  if (details) {
+    console.log(`[SCOUT] ${message}`, details);
+    return;
+  }
+
+  console.log(`[SCOUT] ${message}`);
+}
+
+function toBaseSchool(school: ReturnType<typeof querySchools>[number]): BaseSchool {
+  return {
+    centreCode: school.centreCode,
+    name: school.name,
+    address: school.address,
+    postalCode: school.postalCode,
+    latitude: school.latitude,
+    longitude: school.longitude,
+    operator: school.operator,
+    serviceModel: school.serviceModel,
+    programmeLevels: school.programmeLevels,
+    vacancyStatus: school.vacancyStatus,
+    contactNumber: school.contactNumber,
+    email: school.email,
+    websiteUrl: school.websiteUrl,
+    languagesOffered: school.languagesOffered,
+    monthlyFee: school.monthlyFee
+  };
+}
+
+async function resolveFilters(query: string): Promise<SchoolFilters> {
+  try {
+    logScout("Running OpenAI filters agent.");
+    const parsedFiltersResult = await run(filtersAgent, query);
+    return cleanFilters(parsedFiltersResult.finalOutput ?? {});
+  } catch (error) {
+    console.warn("[SCOUT] Filters agent failed. Falling back to broad cache query.", error);
+    return {};
+  }
+}
+
 function fallbackRecommendations(matches: ReturnType<typeof querySchools>): ScoutRecommendation[] {
   return matches.slice(0, 3).map((school) => ({
     name: school.name,
@@ -77,65 +120,22 @@ function fallbackRecommendations(matches: ReturnType<typeof querySchools>): Scou
   }));
 }
 
-function needsEnrichment(match: ReturnType<typeof querySchools>[number]) {
-  return (
-    Boolean(normalizeWebsiteUrl(match.websiteUrl)) &&
-    !match.lastEnrichedAt &&
-    !match.curriculumStyle &&
-    !match.ethosSummary &&
-    match.enrichmentProgrammes.length === 0
-  );
-}
-
-async function enrichShortlistIfNeeded(filters: SchoolFilters): Promise<ReturnType<typeof querySchools>> {
-  const initialMatches = querySchools(filters);
-  const shortlist = initialMatches
-    .filter(needsEnrichment)
-    .slice(0, Math.max(0, config.scoutEnrichmentLimit));
-
-  if (
-    !config.enableScoutEnrichment ||
-    shortlist.length === 0 ||
-    !config.tinyfishApiKey
-  ) {
-    return initialMatches;
-  }
-
-  try {
-    await enrichSchools(shortlist.map((school) => ({
-      centreCode: school.centreCode,
-      name: school.name,
-      address: school.address,
-      postalCode: school.postalCode,
-      latitude: school.latitude,
-      longitude: school.longitude,
-      operator: school.operator,
-      serviceModel: school.serviceModel,
-      programmeLevels: school.programmeLevels,
-      vacancyStatus: school.vacancyStatus,
-      contactNumber: school.contactNumber,
-      email: school.email,
-      websiteUrl: school.websiteUrl,
-      languagesOffered: school.languagesOffered,
-      monthlyFee: school.monthlyFee
-    })));
-    return querySchools(filters);
-  } catch (error) {
-    console.warn("[Scout] Shortlist enrichment skipped:", error);
-    return initialMatches;
-  }
-}
-
 export async function scout(query: string): Promise<ScoutResult> {
   if (!config.openAiApiKey) {
     throw new Error("OPENAI_API_KEY is required for scout queries.");
   }
 
-  const parsedFiltersResult = await run(filtersAgent, query);
-  const filters = cleanFilters(parsedFiltersResult.finalOutput ?? {});
-  const matches = await enrichShortlistIfNeeded(filters);
+  logScout("Received scout query.", { query });
+  const filters = await resolveFilters(query);
+  logScout("Filters extracted.", { filters });
+  const matches = querySchools(filters);
+  logScout("Cache query completed.", {
+    matches: matches.length,
+    scoutEnrichmentEnabled: false
+  });
 
   if (matches.length === 0) {
+    logScout("No cache matches found.");
     return {
       query,
       filters,
@@ -155,19 +155,33 @@ export async function scout(query: string): Promise<ScoutResult> {
     ethosSummary: school.ethosSummary
   }));
 
-  const recommendationResult = await run(
-    recommendationsAgent,
-    [
-      `Parent query: ${query}`,
-      `Extracted filters: ${JSON.stringify(filters)}`,
-      `Candidate schools: ${JSON.stringify(shortlist)}`
-    ].join("\n")
-  );
+  logScout("Running OpenAI recommendations agent.", {
+    candidateCount: shortlist.length
+  });
+  let baseRecommendations: RecommendationDraft[] = fallbackRecommendations(matches).map((item) => ({
+    name: item.name,
+    address: item.address,
+    reason: item.reason,
+    highlights: item.highlights
+  }));
 
-  const recommendationOutput = recommendationResult.finalOutput;
-  const baseRecommendations = recommendationOutput?.recommendations?.length
-    ? recommendationOutput.recommendations
-    : fallbackRecommendations(matches);
+  try {
+    const recommendationResult = await run(
+      recommendationsAgent,
+      [
+        `Parent query: ${query}`,
+        `Extracted filters: ${JSON.stringify(filters)}`,
+        `Candidate schools: ${JSON.stringify(shortlist)}`
+      ].join("\n")
+    );
+
+    const recommendationOutput = recommendationResult.finalOutput;
+    if (recommendationOutput?.recommendations?.length) {
+      baseRecommendations = recommendationOutput.recommendations;
+    }
+  } catch (error) {
+    console.warn("[SCOUT] Recommendations agent failed. Falling back to heuristic recommendations.", error);
+  }
 
   const recommendations: ScoutRecommendation[] = baseRecommendations.map((item) => {
     const school = matches.find((match) => match.name === item.name && match.address === item.address);
@@ -183,9 +197,50 @@ export async function scout(query: string): Promise<ScoutResult> {
     };
   });
 
+  logScout("Scout completed.", {
+    recommendations: recommendations.map((item) => item.name)
+  });
+
   return {
     query,
     filters,
     recommendations
   };
+}
+
+export async function enrichTopMatch(query: string): Promise<ScoutResult> {
+  if (!config.tinyfishApiKey) {
+    throw new Error("TINYFISH_API_KEY is required to enrich the top match.");
+  }
+
+  logScout("Enrich top match requested.", { query });
+  const filters = await resolveFilters(query);
+  const matches = querySchools(filters);
+  const topMatch = matches[0];
+
+  if (!topMatch) {
+    logScout("No top match available for enrichment.");
+    return {
+      query,
+      filters,
+      recommendations: []
+    };
+  }
+
+  const normalizedWebsite = normalizeWebsiteUrl(topMatch.websiteUrl);
+
+  if (!normalizedWebsite) {
+    throw new Error(`Top match ${topMatch.name} has no valid website to enrich.`);
+  }
+
+  logScout("Starting TinyFish enrichment for top match.", {
+    school: topMatch.name,
+    websiteUrl: normalizedWebsite
+  });
+  await enrichSchools([toBaseSchool(topMatch)]);
+  logScout("TinyFish enrichment for top match completed.", {
+    school: topMatch.name
+  });
+
+  return scout(query);
 }

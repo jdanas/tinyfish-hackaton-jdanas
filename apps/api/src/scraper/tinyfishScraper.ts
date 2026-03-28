@@ -137,15 +137,27 @@ export async function enrichSchools(
   const enrichedRows: EnrichedSchool[] = [];
   const schoolsWithWebsites = schools.filter((school) => school.websiteUrl);
 
+  console.log("[TINYFISH] Enrichment batch started.", {
+    requested: schools.length,
+    withWebsites: schoolsWithWebsites.length
+  });
+
   onEvent?.({
     type: "status",
     message: `Starting TinyFish enrichment for ${schoolsWithWebsites.length} schools.`
   });
 
   for (const school of schoolsWithWebsites) {
+    console.log("[TINYFISH] Enriching school.", {
+      name: school.name,
+      websiteUrl: school.websiteUrl
+    });
     const enriched = await scrapeSingleSchool(client, school, onEvent);
     if (enriched) {
       enrichedRows.push(enriched);
+      console.log("[TINYFISH] Enriched school.", {
+        name: school.name
+      });
     }
   }
 
@@ -156,6 +168,10 @@ export async function enrichSchools(
   onEvent?.({
     type: "complete",
     message: `Enriched ${enrichedRows.length} schools.`,
+    enriched: enrichedRows.length
+  });
+
+  console.log("[TINYFISH] Enrichment batch completed.", {
     enriched: enrichedRows.length
   });
 }

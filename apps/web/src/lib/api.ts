@@ -30,6 +30,11 @@ export interface RefreshEnrichmentResponse {
   message: string;
 }
 
+export interface EnrichTopMatchResponse {
+  message: string;
+  result: ScoutResult;
+}
+
 export interface SchoolDebug {
   centreCode: string;
   name: string;
@@ -95,6 +100,13 @@ export function refreshBase() {
 export function refreshEnrichment() {
   return request<RefreshEnrichmentResponse>("/api/refresh/enrichment", {
     method: "POST"
+  });
+}
+
+export function enrichTopMatch(query: string) {
+  return request<EnrichTopMatchResponse>("/api/scout/enrich-top", {
+    method: "POST",
+    body: JSON.stringify({ query })
   });
 }
 

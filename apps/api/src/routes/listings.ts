@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { scout } from "../agent/scoutAgent.js";
+import { enrichTopMatch, scout } from "../agent/scoutAgent.js";
 import { fetchAndStoreEcdaData } from "../data/ecdaFetcher.js";
 import { getBaseSchools, getCachedSchools, getSchoolCount } from "../data/schoolStore.js";
 import { enrichSchools, type EnrichmentStreamEvent } from "../scraper/tinyfishScraper.js";
@@ -29,6 +29,7 @@ listingsRouter.post("/scout", async (request, response) => {
   }
 
   try {
+    console.log("[API] /api/scout request received.");
     if (getSchoolCount() === 0) {
       response.status(409).json({
         error: "No cached schools yet. Refresh base data first."
@@ -45,9 +46,45 @@ listingsRouter.post("/scout", async (request, response) => {
   }
 });
 
+listingsRouter.post("/scout/enrich-top", async (request, response) => {
+  const parsed = scoutSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({
+      error: "Invalid enrich-top request.",
+      details: parsed.error.flatten()
+    });
+    return;
+  }
+
+  try {
+    console.log("[API] /api/scout/enrich-top request received.");
+    if (getSchoolCount() === 0) {
+      response.status(409).json({
+        error: "No cached schools yet. Refresh base data first."
+      });
+      return;
+    }
+
+    const result = await enrichTopMatch(parsed.data.query);
+    response.json({
+      message: "Top match enriched and recommendations refreshed.",
+      result
+    });
+  } catch (error) {
+    response.status(400).json({
+      error: error instanceof Error ? error.message : "Unable to enrich top match."
+    });
+  }
+});
+
 listingsRouter.post("/refresh/base", async (_request, response) => {
   try {
+    console.log("[API] /api/refresh/base started.");
     await fetchAndStoreEcdaData();
+    console.log("[API] /api/refresh/base completed.", {
+      schools: getSchoolCount()
+    });
     response.json({
       message: "ECDA base data refreshed.",
       schools: getSchoolCount()
@@ -61,7 +98,9 @@ listingsRouter.post("/refresh/base", async (_request, response) => {
 
 listingsRouter.post("/refresh/enrichment", async (_request, response) => {
   try {
+    console.log("[API] /api/refresh/enrichment started.");
     await enrichSchools(getBaseSchools());
+    console.log("[API] /api/refresh/enrichment completed.");
     response.json({
       message: "Enrichment refresh completed."
     });
@@ -84,6 +123,7 @@ listingsRouter.get("/refresh/enrichment/live", async (_request, response) => {
   };
 
   try {
+    console.log("[API] /api/refresh/enrichment/live started.");
     const baseSchools = getBaseSchools();
 
     if (baseSchools.length === 0) {
@@ -95,8 +135,10 @@ listingsRouter.get("/refresh/enrichment/live", async (_request, response) => {
     }
 
     await enrichSchools(baseSchools, (event: EnrichmentStreamEvent) => {
+      console.log(`[TINYFISH] ${event.type}: ${event.message}`);
       send(event.type, event);
     });
+    console.log("[API] /api/refresh/enrichment/live completed.");
     response.end();
   } catch (error) {
     send("failed", {
