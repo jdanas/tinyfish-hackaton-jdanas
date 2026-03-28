@@ -108,10 +108,8 @@ export function initDb(): void {
     );
   `);
 
-  database.exec("DROP VIEW IF EXISTS schools;");
-
   database.exec(`
-    CREATE VIEW schools AS
+    CREATE VIEW IF NOT EXISTS schools AS
     SELECT
       base.centre_code,
       base.name,

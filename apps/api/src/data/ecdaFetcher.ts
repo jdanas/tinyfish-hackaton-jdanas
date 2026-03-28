@@ -90,6 +90,14 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function capRecords<T>(records: T[], maxRecords?: number): T[] {
+  if (!maxRecords || maxRecords <= 0) {
+    return records;
+  }
+
+  return records.slice(0, maxRecords);
+}
+
 async function parseJsonResponse<T>(response: Response, context: string): Promise<T> {
   const contentType = response.headers.get("content-type") ?? "";
   const raw = await response.text();
@@ -107,6 +115,106 @@ async function parseJsonResponse<T>(response: Response, context: string): Promis
       `${context} returned invalid JSON: ${error instanceof Error ? error.message : "parse failure"}`
     );
   }
+}
+
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'");
+}
+
+function extractKmlField(block: string, fieldName: string): string {
+  const dataPattern = new RegExp(
+    `<(?:Data|SimpleData)[^>]*name=["']${fieldName}["'][^>]*>(?:<value>)?([\\s\\S]*?)(?:</value>)?</(?:Data|SimpleData)>`,
+    "i"
+  );
+  const match = block.match(dataPattern);
+  return decodeXmlEntities(match?.[1]?.trim() ?? "");
+}
+
+function parseKmlLocations(raw: string) {
+  const locations = new Map<string, { latitude: number | null; longitude: number | null }>();
+  const placemarks = raw.match(/<Placemark\b[\s\S]*?<\/Placemark>/gi) ?? [];
+
+  for (const placemark of placemarks) {
+    const name =
+      extractKmlField(placemark, "name") ||
+      decodeXmlEntities(placemark.match(/<name>([\s\S]*?)<\/name>/i)?.[1]?.trim() ?? "");
+    const postalCode =
+      extractKmlField(placemark, "addresspostalcode") ||
+      extractKmlField(placemark, "postal_code");
+    const coordinatesRaw = placemark.match(/<coordinates>([\s\S]*?)<\/coordinates>/i)?.[1]?.trim() ?? "";
+    const [longitudeText = "", latitudeText = ""] = coordinatesRaw
+      .split(",")
+      .map((value) => value.trim());
+    const longitude = Number.parseFloat(longitudeText);
+    const latitude = Number.parseFloat(latitudeText);
+
+    if (!name || !postalCode) {
+      continue;
+    }
+
+    locations.set(buildSchoolKey(name, postalCode), {
+      latitude: Number.isFinite(latitude) ? latitude : null,
+      longitude: Number.isFinite(longitude) ? longitude : null
+    });
+  }
+
+  return locations;
+}
+
+async function parseLocationResponse(
+  response: Response,
+  context: string
+): Promise<Map<string, { latitude: number | null; longitude: number | null }>> {
+  const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+  const raw = await response.text();
+
+  if (contentType.includes("application/json")) {
+    const geoPayload = JSON.parse(raw) as GeoJsonResponse;
+    const locations = new Map<string, { latitude: number | null; longitude: number | null }>();
+
+    for (const feature of geoPayload.features ?? []) {
+      const props = feature.properties ?? {};
+      const name = String(props.name ?? props.NAME ?? "").trim();
+      const postalCode = String(
+        props.addresspostalcode ??
+          props.ADDRESSPOSTALCODE ??
+          props.postal_code ??
+          ""
+      ).trim();
+
+      if (!name || !postalCode) {
+        continue;
+      }
+
+      const coordinates = feature.geometry?.coordinates;
+      locations.set(buildSchoolKey(name, postalCode), {
+        longitude: coordinates?.[0] ?? null,
+        latitude: coordinates?.[1] ?? null
+      });
+    }
+
+    return locations;
+  }
+
+  if (
+    contentType.includes("application/vnd.google-earth.kml+xml") ||
+    contentType.includes("application/xml") ||
+    contentType.includes("text/xml") ||
+    contentType.includes("application/octet-stream") ||
+    raw.trim().startsWith("<?xml") ||
+    raw.includes("<kml")
+  ) {
+    return parseKmlLocations(raw);
+  }
+
+  throw new Error(
+    `${context} returned unsupported content (${contentType || "unknown"}): ${raw.slice(0, 200)}`
+  );
 }
 
 async function fetchWithRetry(url: string, context: string, init?: RequestInit): Promise<Response> {
@@ -142,22 +250,22 @@ function buildSchoolKey(name: string, postalCode: string) {
   return `${normalizeText(name)}::${postalCode}`;
 }
 
-async function fetchAllDatastoreRecords<T>(datasetId: string): Promise<T[]> {
+async function fetchAllDatastoreRecords<T>(datasetId: string, maxRecords?: number): Promise<T[]> {
   try {
-    return await fetchViaDatastoreSearch<T>(datasetId);
+    return await fetchViaDatastoreSearch<T>(datasetId, maxRecords);
   } catch (primaryError) {
     console.warn(
       `[ECDA] datastore_search failed for ${datasetId}, falling back to list-rows:`,
       primaryError
     );
-    return fetchViaListRows<T>(datasetId);
+    return fetchViaListRows<T>(datasetId, maxRecords);
   }
 }
 
-async function fetchViaDatastoreSearch<T>(datasetId: string): Promise<T[]> {
+async function fetchViaDatastoreSearch<T>(datasetId: string, maxRecords?: number): Promise<T[]> {
   const records: T[] = [];
   let offset = 0;
-  const limit = 1000;
+  const limit = maxRecords && maxRecords > 0 ? Math.min(maxRecords, 100) : 1000;
 
   while (true) {
     const url = `https://data.gov.sg/api/action/datastore_search?resource_id=${datasetId}&limit=${limit}&offset=${offset}`;
@@ -179,17 +287,17 @@ async function fetchViaDatastoreSearch<T>(datasetId: string): Promise<T[]> {
     const batch = payload.result?.records ?? [];
     records.push(...batch);
 
-    if (batch.length < limit) {
+    if ((maxRecords && records.length >= maxRecords) || batch.length < limit) {
       break;
     }
 
     offset += limit;
   }
 
-  return records;
+  return capRecords(records, maxRecords);
 }
 
-async function fetchViaListRows<T>(datasetId: string): Promise<T[]> {
+async function fetchViaListRows<T>(datasetId: string, maxRecords?: number): Promise<T[]> {
   const records: T[] = [];
   let nextUrl:
     | string
@@ -221,6 +329,10 @@ async function fetchViaListRows<T>(datasetId: string): Promise<T[]> {
 
     records.push(...(payload.data?.rows ?? []));
 
+    if (maxRecords && records.length >= maxRecords) {
+      break;
+    }
+
     const next = payload.data?.links?.next;
     nextUrl = next
       ? next.startsWith("http")
@@ -229,7 +341,7 @@ async function fetchViaListRows<T>(datasetId: string): Promise<T[]> {
       : null;
   }
 
-  return records;
+  return capRecords(records, maxRecords);
 }
 
 async function fetchLocations(): Promise<Map<string, { latitude: number | null; longitude: number | null }>> {
@@ -261,34 +373,10 @@ async function fetchLocations(): Promise<Map<string, { latitude: number | null; 
     throw new Error("ECDA preschool location download failed.");
   }
 
-  const geoPayload = await parseJsonResponse<GeoJsonResponse>(
+  return parseLocationResponse(
     geoResponse,
     `ECDA location download ${PRESCHOOLS_LOCATION_DATASET_ID}`
   );
-  const locations = new Map<string, { latitude: number | null; longitude: number | null }>();
-
-  for (const feature of geoPayload.features ?? []) {
-    const props = feature.properties ?? {};
-    const name = String(props.name ?? props.NAME ?? "").trim();
-    const postalCode = String(
-      props.addresspostalcode ??
-        props.ADDRESSPOSTALCODE ??
-        props.postal_code ??
-        ""
-    ).trim();
-
-    if (!name || !postalCode) {
-      continue;
-    }
-
-    const coordinates = feature.geometry?.coordinates;
-    locations.set(buildSchoolKey(name, postalCode), {
-      longitude: coordinates?.[0] ?? null,
-      latitude: coordinates?.[1] ?? null
-    });
-  }
-
-  return locations;
 }
 
 function deriveVacancyStatus(record: CentresRecord) {
@@ -319,8 +407,15 @@ function deriveVacancyStatus(record: CentresRecord) {
 }
 
 export async function fetchAndStoreEcdaData(): Promise<void> {
-  const centres = await fetchAllDatastoreRecords<CentresRecord>(LISTING_OF_CENTRES_DATASET_ID);
-  const services = await fetchAllDatastoreRecords<ServicesRecord>(LISTING_OF_CENTRE_SERVICES_DATASET_ID);
+  const prototypeLimit = config.ecdaPrototypeLimit > 0 ? config.ecdaPrototypeLimit : 50;
+  const centres = await fetchAllDatastoreRecords<CentresRecord>(
+    LISTING_OF_CENTRES_DATASET_ID,
+    prototypeLimit
+  );
+  const services = await fetchAllDatastoreRecords<ServicesRecord>(
+    LISTING_OF_CENTRE_SERVICES_DATASET_ID,
+    prototypeLimit
+  );
   const locations = await fetchLocations();
 
   const servicesByCentreCode = new Map<string, ServicesRecord[]>();

@@ -28,10 +28,11 @@ The frontend runs on `http://localhost:5173` and proxies API calls to `http://lo
 
 ## Environment
 
-`DATA_GOV_API_KEY` is recommended for higher ECDA/data.gov.sg limits. `OPENAI_API_KEY` is needed for scout queries. `TINYFISH_API_KEY` is required for live enrichment scraping.
+`DATA_GOV_API_KEY` is recommended for higher ECDA/data.gov.sg limits. `ECDA_PROTOTYPE_LIMIT=50` keeps base ingestion small for prototype runs. `OPENAI_API_KEY` is needed for scout queries. `TINYFISH_API_KEY` is required for live enrichment scraping.
 
 ```bash
 DATA_GOV_API_KEY=
+ECDA_PROTOTYPE_LIMIT=50
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5-mini
 AGENTQL_API_KEY=
