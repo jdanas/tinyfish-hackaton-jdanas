@@ -1,7 +1,7 @@
 # KiaSkool
 <img width="974" height="686" alt="image" src="https://github.com/user-attachments/assets/a6194603-df86-44b1-9bb9-743e801bcfbe" />
 
-Kiaskool scouts the right tuition centre before parents start stress-scrolling.
+Kiaskool scouts the right preschool before parents start stress-scrolling.
 
 - `Vite + React + TypeScript` for the frontend
 - `Express + TypeScript` for the API
@@ -46,7 +46,7 @@ ENABLE_LIVE_SCRAPE=false
 
 ## What works now
 
-- Search nearby tuition centres by Singapore postal code
+- Search Singapore preschools from a local ECDA-backed cache
 - Rank centres with a weighted score across affordability, distance, reviews, class size, and subject relevance
 - Persist listings in a local SQLite database file
 - Generate recommendation summaries with OpenAI Agents SDK when an API key is configured

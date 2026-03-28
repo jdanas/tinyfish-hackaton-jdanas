@@ -14,9 +14,9 @@ interface SearchFormProps {
 }
 
 const quickPrompts = [
-  "My P6 kid needs affordable math tuition near Tampines under $300",
-  "Looking for small-group English tuition near Woodlands",
-  "Need a science-focused centre with strong reviews around Bishan"
+  "Looking for a preschool near Tampines with Mandarin exposure and longer hours",
+  "Need a play-based preschool around Woodlands with a warm environment",
+  "Looking for a preschool near Bishan with strong early years curriculum"
 ];
 
 export function SearchForm({ loading, initialValues, onSubmit }: SearchFormProps) {
@@ -52,7 +52,7 @@ export function SearchForm({ loading, initialValues, onSubmit }: SearchFormProps
         <label htmlFor="brief">Tell Kiaskool what the student needs</label>
         <textarea
           id="brief"
-          placeholder="My Sec 2 child needs budget-friendly math tuition near the east side with small classes."
+          placeholder="Looking for a preschool near the east side with Mandarin exposure, caring teachers, and longer full-day hours."
           rows={4}
           value={brief}
           onChange={(event) => setBrief(event.target.value)}

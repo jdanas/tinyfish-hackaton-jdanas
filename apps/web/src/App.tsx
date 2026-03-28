@@ -181,7 +181,7 @@ export default function App() {
       <section className="hero-card">
         <p className="eyebrow">Singapore preschool discovery</p>
         <h1>
-          Kiaskool scouts the right tuition centre before parents start
+          Kiaskool scouts the right preschool before parents start
           stress-scrolling..
         </h1>
         <p className="hero-copy">
