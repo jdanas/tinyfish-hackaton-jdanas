@@ -18,6 +18,25 @@ type ScrapedEnrichment = {
   ethos_summary?: string;
 };
 
+function normalizeWebsiteUrl(rawUrl: string | null): string | null {
+  if (!rawUrl) {
+    return null;
+  }
+
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    return new URL(withScheme).toString();
+  } catch {
+    return null;
+  }
+}
+
 function toList(value: string[] | string | undefined) {
   if (Array.isArray(value)) {
     return value.map((item) => item.trim()).filter(Boolean);
@@ -38,7 +57,13 @@ async function scrapeSingleSchool(
   school: BaseSchool,
   onEvent?: (event: EnrichmentStreamEvent) => void
 ): Promise<EnrichedSchool | null> {
-  if (!school.websiteUrl) {
+  const websiteUrl = normalizeWebsiteUrl(school.websiteUrl);
+
+  if (!websiteUrl) {
+    onEvent?.({
+      type: "progress",
+      message: `${school.name}: skipped because website URL is invalid`
+    });
     return null;
   }
 
@@ -48,7 +73,7 @@ async function scrapeSingleSchool(
   });
 
   const stream = await client.agent.stream({
-    url: school.websiteUrl,
+    url: websiteUrl,
     goal: `Extract structured preschool enrichment details from this school website.
     Return strict JSON with:
     - curriculum_style
@@ -92,7 +117,7 @@ async function scrapeSingleSchool(
     enrichmentProgrammes: toList(resultPayload.enrichment_programmes),
     openHouseDates: toList(resultPayload.open_house_dates),
     ethosSummary: resultPayload.ethos_summary?.trim() ?? null,
-    sourceWebsite: school.websiteUrl,
+    sourceWebsite: websiteUrl,
     lastEnrichedAt: new Date().toISOString()
   };
 }
@@ -134,4 +159,3 @@ export async function enrichSchools(
     enriched: enrichedRows.length
   });
 }
-
