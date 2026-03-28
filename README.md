@@ -1,4 +1,5 @@
 # KiaSkool
+<img width="974" height="686" alt="image" src="https://github.com/user-attachments/assets/a6194603-df86-44b1-9bb9-743e801bcfbe" />
 
 Kiaskool scouts the right tuition centre before parents start stress-scrolling.
 
