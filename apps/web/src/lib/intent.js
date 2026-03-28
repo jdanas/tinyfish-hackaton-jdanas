@@ -21,11 +21,14 @@ function inferPostalCode(brief, fallback) {
     if (explicitPostal) {
         return explicitPostal[0];
     }
+    const areaMatch = areaHints.find((item) => item.pattern.test(brief));
+    if (areaMatch) {
+        return areaMatch.postalCode;
+    }
     if (fallback.trim().length === 6) {
         return fallback.trim();
     }
-    const areaMatch = areaHints.find((item) => item.pattern.test(brief));
-    return areaMatch?.postalCode ?? "529508";
+    return "529508";
 }
 function inferBudget(brief, fallback) {
     const moneyMatch = brief.match(/\$?\s?(\d{2,4})/);

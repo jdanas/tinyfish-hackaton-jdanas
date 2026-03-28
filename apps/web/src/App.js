@@ -6,9 +6,9 @@ import { refreshListings, searchListings } from "./lib/api";
 import { parseSearchDraft } from "./lib/intent";
 const defaultDraft = {
     brief: "My P6 child needs affordable math tuition near Tampines with good reviews and a monthly budget below $320.",
-    postalCode: "529508",
-    subject: "Math",
-    maxMonthlyFee: "320"
+    postalCode: "",
+    subject: "",
+    maxMonthlyFee: ""
 };
 export default function App() {
     const [results, setResults] = useState(null);

@@ -86,7 +86,7 @@ export function SearchForm({ loading, initialValues, onSubmit }: SearchFormProps
 
         <div className="search-panel">
           <div>
-            <label htmlFor="postalCode">Postal code</label>
+            <label htmlFor="postalCode">Postal code override</label>
             <input
               id="postalCode"
               inputMode="numeric"
@@ -99,7 +99,7 @@ export function SearchForm({ loading, initialValues, onSubmit }: SearchFormProps
             />
           </div>
           <div>
-            <label htmlFor="subject">Subject</label>
+            <label htmlFor="subject">Subject override</label>
             <input
               id="subject"
               placeholder="Math"
@@ -108,7 +108,7 @@ export function SearchForm({ loading, initialValues, onSubmit }: SearchFormProps
             />
           </div>
           <div>
-            <label htmlFor="maxMonthlyFee">Budget cap (S$/month)</label>
+            <label htmlFor="maxMonthlyFee">Budget override (S$/month)</label>
             <input
               id="maxMonthlyFee"
               inputMode="numeric"
