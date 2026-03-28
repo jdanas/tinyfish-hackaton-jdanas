@@ -5,6 +5,7 @@ import { Agent, run } from "@openai/agents";
 import { z } from "zod";
 import { config } from "../config.js";
 import { querySchools } from "../data/schoolStore.js";
+import { enrichSchools, normalizeWebsiteUrl } from "../scraper/tinyfishScraper.js";
 import type { SchoolFilters, ScoutRecommendation, ScoutResult } from "../types/school.js";
 
 const filtersSchema = z.object({
@@ -76,6 +77,55 @@ function fallbackRecommendations(matches: ReturnType<typeof querySchools>): Scou
   }));
 }
 
+function needsEnrichment(match: ReturnType<typeof querySchools>[number]) {
+  return (
+    Boolean(normalizeWebsiteUrl(match.websiteUrl)) &&
+    !match.lastEnrichedAt &&
+    !match.curriculumStyle &&
+    !match.ethosSummary &&
+    match.enrichmentProgrammes.length === 0
+  );
+}
+
+async function enrichShortlistIfNeeded(filters: SchoolFilters): Promise<ReturnType<typeof querySchools>> {
+  const initialMatches = querySchools(filters);
+  const shortlist = initialMatches
+    .filter(needsEnrichment)
+    .slice(0, Math.max(0, config.scoutEnrichmentLimit));
+
+  if (
+    !config.enableScoutEnrichment ||
+    shortlist.length === 0 ||
+    !config.tinyfishApiKey
+  ) {
+    return initialMatches;
+  }
+
+  try {
+    await enrichSchools(shortlist.map((school) => ({
+      centreCode: school.centreCode,
+      name: school.name,
+      address: school.address,
+      postalCode: school.postalCode,
+      latitude: school.latitude,
+      longitude: school.longitude,
+      operator: school.operator,
+      serviceModel: school.serviceModel,
+      programmeLevels: school.programmeLevels,
+      vacancyStatus: school.vacancyStatus,
+      contactNumber: school.contactNumber,
+      email: school.email,
+      websiteUrl: school.websiteUrl,
+      languagesOffered: school.languagesOffered,
+      monthlyFee: school.monthlyFee
+    })));
+    return querySchools(filters);
+  } catch (error) {
+    console.warn("[Scout] Shortlist enrichment skipped:", error);
+    return initialMatches;
+  }
+}
+
 export async function scout(query: string): Promise<ScoutResult> {
   if (!config.openAiApiKey) {
     throw new Error("OPENAI_API_KEY is required for scout queries.");
@@ -83,7 +133,7 @@ export async function scout(query: string): Promise<ScoutResult> {
 
   const parsedFiltersResult = await run(filtersAgent, query);
   const filters = cleanFilters(parsedFiltersResult.finalOutput ?? {});
-  const matches = querySchools(filters);
+  const matches = await enrichShortlistIfNeeded(filters);
 
   if (matches.length === 0) {
     return {
@@ -139,4 +189,3 @@ export async function scout(query: string): Promise<ScoutResult> {
     recommendations
   };
 }
-

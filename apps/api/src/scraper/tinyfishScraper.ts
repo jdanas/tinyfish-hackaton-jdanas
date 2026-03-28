@@ -18,7 +18,7 @@ type ScrapedEnrichment = {
   ethos_summary?: string;
 };
 
-function normalizeWebsiteUrl(rawUrl: string | null): string | null {
+export function normalizeWebsiteUrl(rawUrl: string | null): string | null {
   if (!rawUrl) {
     return null;
   }

@@ -12,7 +12,9 @@ const dataDir = path.resolve(currentDir, "../data");
 export const config = {
   port: Number(process.env.PORT ?? 8787),
   dataGovApiKey: process.env.DATA_GOV_API_KEY ?? "",
-  ecdaPrototypeLimit: Number(process.env.ECDA_PROTOTYPE_LIMIT ?? 50),
+  ecdaPrototypeLimit: Number(process.env.ECDA_PROTOTYPE_LIMIT ?? 100),
+  enableScoutEnrichment: process.env.ENABLE_SCOUT_ENRICHMENT === "true",
+  scoutEnrichmentLimit: Number(process.env.SCOUT_ENRICHMENT_LIMIT ?? 5),
   openAiApiKey: process.env.OPENAI_API_KEY ?? "",
   openAiModel: process.env.OPENAI_MODEL ?? "gpt-5-mini",
   agentQlApiKey: process.env.AGENTQL_API_KEY ?? "",
