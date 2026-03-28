@@ -106,9 +106,11 @@ export function initDb(): void {
       last_enriched_at TEXT NOT NULL,
       PRIMARY KEY (school_name, postal_code)
     );
+  `);
 
-    DROP VIEW IF EXISTS schools;
+  database.exec("DROP VIEW IF EXISTS schools;");
 
+  database.exec(`
     CREATE VIEW schools AS
     SELECT
       base.centre_code,
@@ -318,4 +320,3 @@ export function querySchools(filters: SchoolFilters): School[] {
 
   return scored.map(({ school }) => school);
 }
-

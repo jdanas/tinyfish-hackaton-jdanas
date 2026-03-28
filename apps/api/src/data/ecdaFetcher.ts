@@ -2,6 +2,7 @@
  * ECDA/data.gov.sg ingestion layer. Fetches official preschool datasets and stores normalized base rows.
  */
 import { upsertBaseSchools } from "./schoolStore.js";
+import { config } from "../config.js";
 import type { BaseSchool } from "../types/school.js";
 
 const LISTING_OF_CENTRES_DATASET_ID = "d_696c994c50745b079b3684f0e90ffc53";
@@ -72,6 +73,19 @@ type GeoJsonResponse = {
 
 const MAX_RETRIES = 4;
 
+function buildRequestInit(init?: RequestInit): RequestInit | undefined {
+  const headers = new Headers(init?.headers);
+
+  if (config.dataGovApiKey) {
+    headers.set("x-api-key", config.dataGovApiKey);
+  }
+
+  return {
+    ...init,
+    headers
+  };
+}
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -97,9 +111,10 @@ async function parseJsonResponse<T>(response: Response, context: string): Promis
 
 async function fetchWithRetry(url: string, context: string, init?: RequestInit): Promise<Response> {
   let attempt = 0;
+  const requestInit = buildRequestInit(init);
 
   while (true) {
-    const response = await fetch(url, init);
+    const response = await fetch(url, requestInit);
 
     if (response.status !== 429) {
       return response;
