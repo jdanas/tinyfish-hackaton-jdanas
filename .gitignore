@@ -1,0 +1,10 @@
+.DS_Store
+node_modules
+dist
+.env
+apps/api/data/*.db
+apps/api/data/*.sqlite
+apps/api/data/*.sqlite3
+playwright-report
+test-results
+
