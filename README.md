@@ -1,6 +1,6 @@
-# Best Value Tuition SG
+# KiaSkool
 
-A hackathon-ready full-stack app for parents in Singapore to find tuition centres that balance price, commute, and teaching quality. The repo is scaffolded around:
+Kiaskool scouts the right tuition centre before parents start stress-scrolling.
 
 - `Vite + React + TypeScript` for the frontend
 - `Express + TypeScript` for the API
