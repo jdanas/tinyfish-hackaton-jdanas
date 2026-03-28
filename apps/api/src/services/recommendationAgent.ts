@@ -7,10 +7,9 @@ const recommendationOutput = z.object({
   summary: z.string(),
   highlights: z.array(z.string()).max(4),
 });
-
 const recommendationAgent = new Agent({
   name: "Tuition Value Recommender",
-  model: config.geminiModel,
+  model: config.openAiModel,
   instructions:
     "You help parents in Singapore compare tuition centres. Prioritize value for money, commute convenience, subject fit, and review quality. Keep recommendations concrete and practical.",
   outputType: recommendationOutput,
@@ -49,18 +48,11 @@ function buildFallbackRecommendation(
 export async function recommendListings(
   listings: ScoredListing[],
 ): Promise<RecommendationResult> {
-  if (!config.geminiApiKey || listings.length === 0) {
+  if (!config.openAiApiKey || listings.length === 0) {
     return buildFallbackRecommendation(listings);
   }
 
   try {
-    // Configure environment variables for OpenAI SDK to use Gemini
-    const originalApiKey = process.env.OPENAI_API_KEY;
-    const originalBaseUrl = process.env.OPENAI_BASE_URL;
-    
-    process.env.OPENAI_API_KEY = config.geminiApiKey;
-    process.env.OPENAI_BASE_URL = config.geminiBaseUrl;
-
     const shortlist = listings.slice(0, 5).map((listing) => ({
       name: listing.name,
       area: listing.area,
@@ -83,12 +75,6 @@ export async function recommendListings(
       )}`,
     );
 
-    // Restore original environment variables
-    if (originalApiKey) process.env.OPENAI_API_KEY = originalApiKey;
-    else delete process.env.OPENAI_API_KEY;
-    if (originalBaseUrl) process.env.OPENAI_BASE_URL = originalBaseUrl;
-    else delete process.env.OPENAI_BASE_URL;
-
     const output = result.finalOutput;
 
     if (!output) {
@@ -99,7 +85,7 @@ export async function recommendListings(
       summary: output.summary,
       highlights: output.highlights,
       generatedByAI: true,
-      model: config.geminiModel,
+      model: config.openAiModel,
     };
   } catch (error) {
     console.error("Recommendation agent failed:", error);
