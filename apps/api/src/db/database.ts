@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { Database } from "bun:sqlite";
 import { config } from "../config.js";
-import { sampleListings } from "../data/sampleListings.js";
 import type { TuitionCentre } from "../types/domain.js";
 
 type ListingRow = {
@@ -99,18 +98,6 @@ function listingToParams(listing: TuitionCentre) {
   ] as const;
 }
 
-export function seedListingsIfEmpty(): void {
-  const row = database.prepare("SELECT COUNT(*) as count FROM tuition_centres").get() as {
-    count: number;
-  };
-
-  if (row.count > 0) {
-    return;
-  }
-
-  saveListings(sampleListings);
-}
-
 export function saveListings(listings: TuitionCentre[]): void {
   const insert = database.prepare(`
     INSERT INTO tuition_centres (
@@ -173,6 +160,60 @@ export function saveListings(listings: TuitionCentre[]): void {
   `);
 
   const transaction = database.transaction((rows: TuitionCentre[]) => {
+    for (const listing of rows) {
+      insert.run(...listingToParams(listing));
+    }
+  });
+
+  transaction(listings);
+}
+
+export function replaceAllListings(listings: TuitionCentre[]): void {
+  const clear = database.prepare("DELETE FROM tuition_centres");
+  const insert = database.prepare(`
+    INSERT INTO tuition_centres (
+      id,
+      name,
+      source,
+      address,
+      postal_code,
+      area,
+      lat,
+      lng,
+      monthly_fee,
+      rating,
+      review_count,
+      class_size,
+      trial_fee,
+      subjects_json,
+      tags_json,
+      parent_blurb,
+      website_url,
+      google_maps_url
+    ) VALUES (
+      ?1,
+      ?2,
+      ?3,
+      ?4,
+      ?5,
+      ?6,
+      ?7,
+      ?8,
+      ?9,
+      ?10,
+      ?11,
+      ?12,
+      ?13,
+      ?14,
+      ?15,
+      ?16,
+      ?17,
+      ?18
+    )
+  `);
+
+  const transaction = database.transaction((rows: TuitionCentre[]) => {
+    clear.run();
     for (const listing of rows) {
       insert.run(...listingToParams(listing));
     }

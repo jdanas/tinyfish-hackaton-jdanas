@@ -1,4 +1,4 @@
-export type ListingSource = "seed" | "kiasuparents" | "google_maps";
+export type ListingSource = "seed" | "kiasuparents" | "google_maps" | "life_gov";
 
 export interface TuitionCentre {
   id: string;

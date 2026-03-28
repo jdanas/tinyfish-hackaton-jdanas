@@ -28,12 +28,13 @@ The frontend runs on `http://localhost:5173` and proxies API calls to `http://lo
 
 ## Environment
 
-Only `OPENAI_API_KEY` is needed for AI-generated recommendations. `AGENTQL_API_KEY` and Playwright are only required if you want to attempt live scraping instead of using the seeded fallback dataset.
+Only `OPENAI_API_KEY` is needed for AI-generated recommendations. `TINYFISH_API_KEY` is required for live scraping.
 
 ```bash
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5-mini
 AGENTQL_API_KEY=
+TINYFISH_API_KEY=
 PORT=8787
 ENABLE_LIVE_SCRAPE=false
 ```
@@ -44,14 +45,13 @@ ENABLE_LIVE_SCRAPE=false
 - Rank centres with a weighted score across affordability, distance, reviews, class size, and subject relevance
 - Persist listings in a local SQLite database file
 - Generate recommendation summaries with OpenAI Agents SDK when an API key is configured
-- Refresh data with a scraper pipeline that falls back to seeded listings until live scraping credentials are enabled
+- Refresh data with a live TinyFish scraper pipeline against LifeSG preschool search
 
 ## Live scraping notes
 
-The scraper service is wired for `AgentQL + Playwright`, but it intentionally falls back to local sample data unless:
+The scraper service is now live-data only and currently targets LifeSG preschool search:
 
 1. `ENABLE_LIVE_SCRAPE=true`
-2. `AGENTQL_API_KEY` is set
-3. Playwright browser dependencies are installed with `bunx playwright install chromium`
+2. `TINYFISH_API_KEY` is set
 
-That keeps the hackathon repo runnable on first install while leaving a clean path to add real KiasuParents and Google Maps ingestion.
+If TinyFish returns no data, the refresh endpoint fails and no mock listings are loaded.

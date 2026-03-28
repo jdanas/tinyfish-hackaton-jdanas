@@ -60,7 +60,12 @@ listingsRouter.post("/search", async (request, response) => {
 });
 
 listingsRouter.post("/scrape/refresh", async (_request, response) => {
-  const result = await refreshListings();
-  response.json(result);
+  try {
+    const result = await refreshListings();
+    response.json(result);
+  } catch (error) {
+    response.status(502).json({
+      error: error instanceof Error ? error.message : "Unable to refresh live listings."
+    });
+  }
 });
-
