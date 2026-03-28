@@ -9,7 +9,7 @@ const recommendationOutput = z.object({
 });
 const recommendationAgent = new Agent({
   name: "Tuition Value Recommender",
-  model: config.openAiModel,
+  model: config.geminiModel,
   instructions:
     "You help parents in Singapore compare tuition centres. Prioritize value for money, commute convenience, subject fit, and review quality. Keep recommendations concrete and practical.",
   outputType: recommendationOutput,
@@ -48,11 +48,20 @@ function buildFallbackRecommendation(
 export async function recommendListings(
   listings: ScoredListing[],
 ): Promise<RecommendationResult> {
-  if (!config.openAiApiKey || listings.length === 0) {
+  if (!config.geminiApiKey || listings.length === 0) {
     return buildFallbackRecommendation(listings);
   }
 
   try {
+    // Configure environment variables for OpenAI SDK to use Gemini
+    const originalApiKey = process.env.OPENAI_API_KEY;
+    const originalBaseUrl = process.env.OPENAI_BASE_URL;
+    
+    process.env.OPENAI_API_KEY = config.geminiApiKey;
+    process.env.OPENAI_BASE_URL = config.geminiBaseUrl;
+    // Disable tracing to avoid authentication errors
+    process.env.OPENAI_TRACING_ENABLED = "false";
+
     const shortlist = listings.slice(0, 5).map((listing) => ({
       name: listing.name,
       area: listing.area,
@@ -75,6 +84,13 @@ export async function recommendListings(
       )}`,
     );
 
+    // Restore original environment variables
+    if (originalApiKey) process.env.OPENAI_API_KEY = originalApiKey;
+    else delete process.env.OPENAI_API_KEY;
+    if (originalBaseUrl) process.env.OPENAI_BASE_URL = originalBaseUrl;
+    else delete process.env.OPENAI_BASE_URL;
+    delete process.env.OPENAI_TRACING_ENABLED;
+
     const output = result.finalOutput;
 
     if (!output) {
@@ -85,7 +101,7 @@ export async function recommendListings(
       summary: output.summary,
       highlights: output.highlights,
       generatedByAI: true,
-      model: config.openAiModel,
+      model: config.geminiModel,
     };
   } catch (error) {
     console.error("Recommendation agent failed:", error);
