@@ -5,18 +5,20 @@ import type { RecommendationResult, ScoredListing } from "../types/domain.js";
 
 const recommendationOutput = z.object({
   summary: z.string(),
-  highlights: z.array(z.string()).max(4)
+  highlights: z.array(z.string()).max(4),
 });
 
 const recommendationAgent = new Agent({
   name: "Tuition Value Recommender",
-  model: config.openAiModel,
+  model: config.geminiModel,
   instructions:
     "You help parents in Singapore compare tuition centres. Prioritize value for money, commute convenience, subject fit, and review quality. Keep recommendations concrete and practical.",
-  outputType: recommendationOutput
+  outputType: recommendationOutput,
 });
 
-function buildFallbackRecommendation(listings: ScoredListing[]): RecommendationResult {
+function buildFallbackRecommendation(
+  listings: ScoredListing[],
+): RecommendationResult {
   const [first, second] = listings;
 
   if (!first) {
@@ -24,7 +26,7 @@ function buildFallbackRecommendation(listings: ScoredListing[]): RecommendationR
       summary: "No listings matched the current filters yet.",
       highlights: ["Try a nearby postal code or remove the budget cap."],
       generatedByAI: false,
-      model: "heuristic-fallback"
+      model: "heuristic-fallback",
     };
   }
 
@@ -37,19 +39,28 @@ function buildFallbackRecommendation(listings: ScoredListing[]): RecommendationR
     highlights: [
       `${first.name} has the strongest combined affordability and commute profile in this shortlist.`,
       `It is rated ${first.rating}/5 from ${first.reviewCount} reviews with a class size of ${first.classSize}.`,
-      tradeoff
+      tradeoff,
     ],
     generatedByAI: false,
-    model: "heuristic-fallback"
+    model: "heuristic-fallback",
   };
 }
 
-export async function recommendListings(listings: ScoredListing[]): Promise<RecommendationResult> {
-  if (!config.openAiApiKey || listings.length === 0) {
+export async function recommendListings(
+  listings: ScoredListing[],
+): Promise<RecommendationResult> {
+  if (!config.geminiApiKey || listings.length === 0) {
     return buildFallbackRecommendation(listings);
   }
 
   try {
+    // Configure environment variables for OpenAI SDK to use Gemini
+    const originalApiKey = process.env.OPENAI_API_KEY;
+    const originalBaseUrl = process.env.OPENAI_BASE_URL;
+    
+    process.env.OPENAI_API_KEY = config.geminiApiKey;
+    process.env.OPENAI_BASE_URL = config.geminiBaseUrl;
+
     const shortlist = listings.slice(0, 5).map((listing) => ({
       name: listing.name,
       area: listing.area,
@@ -60,7 +71,7 @@ export async function recommendListings(listings: ScoredListing[]): Promise<Reco
       classSize: listing.classSize,
       subjects: listing.subjects,
       valueScore: listing.valueScore,
-      parentBlurb: listing.parentBlurb
+      parentBlurb: listing.parentBlurb,
     }));
 
     const result = await run(
@@ -68,9 +79,15 @@ export async function recommendListings(listings: ScoredListing[]): Promise<Reco
       `Recommend the best tuition option from this shortlist and mention one realistic fallback.\n${JSON.stringify(
         shortlist,
         null,
-        2
-      )}`
+        2,
+      )}`,
     );
+
+    // Restore original environment variables
+    if (originalApiKey) process.env.OPENAI_API_KEY = originalApiKey;
+    else delete process.env.OPENAI_API_KEY;
+    if (originalBaseUrl) process.env.OPENAI_BASE_URL = originalBaseUrl;
+    else delete process.env.OPENAI_BASE_URL;
 
     const output = result.finalOutput;
 
@@ -82,11 +99,10 @@ export async function recommendListings(listings: ScoredListing[]): Promise<Reco
       summary: output.summary,
       highlights: output.highlights,
       generatedByAI: true,
-      model: config.openAiModel
+      model: config.geminiModel,
     };
   } catch (error) {
     console.error("Recommendation agent failed:", error);
     return buildFallbackRecommendation(listings);
   }
 }
-

@@ -14,7 +14,10 @@ export const config = {
   openAiApiKey: process.env.OPENAI_API_KEY ?? "",
   openAiModel: process.env.OPENAI_MODEL ?? "gpt-5-mini",
   agentQlApiKey: process.env.AGENTQL_API_KEY ?? "",
+  tinyfishApiKey: process.env.TINYFISH_API_KEY ?? process.env.AGENTQL_API_KEY ?? "",
   enableLiveScrape: process.env.ENABLE_LIVE_SCRAPE === "true",
-  databasePath: path.join(dataDir, "tuition.db")
+  databasePath: path.join(dataDir, "tuition.db"),
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.0-flash-exp",
+  geminiBaseUrl: process.env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta/openai/",
 };
-
