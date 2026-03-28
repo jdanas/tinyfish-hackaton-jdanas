@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { enrichTopMatch, scout } from "../agent/scoutAgent.js";
+import { enrichTopMatch, getTopMatchSchool, scout } from "../agent/scoutAgent.js";
 import { fetchAndStoreEcdaData } from "../data/ecdaFetcher.js";
 import { getBaseSchools, getCachedSchools, getSchoolCount } from "../data/schoolStore.js";
 import { enrichSchools, type EnrichmentStreamEvent } from "../scraper/tinyfishScraper.js";
@@ -75,6 +75,69 @@ listingsRouter.post("/scout/enrich-top", async (request, response) => {
     response.status(400).json({
       error: error instanceof Error ? error.message : "Unable to enrich top match."
     });
+  }
+});
+
+listingsRouter.get("/scout/enrich-top/live", async (request, response) => {
+  const parsed = scoutSchema.safeParse({
+    query: String(request.query.query ?? "")
+  });
+
+  if (!parsed.success) {
+    response.status(400).json({
+      error: "Invalid enrich-top live request.",
+      details: parsed.error.flatten()
+    });
+    return;
+  }
+
+  response.setHeader("Content-Type", "text/event-stream");
+  response.setHeader("Cache-Control", "no-cache");
+  response.setHeader("Connection", "keep-alive");
+  response.flushHeaders?.();
+
+  const send = (eventName: string, payload: object) => {
+    response.write(`event: ${eventName}\n`);
+    response.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  try {
+    console.log("[API] /api/scout/enrich-top/live request received.");
+    if (getSchoolCount() === 0) {
+      send("failed", {
+        message: "No cached schools yet. Refresh base data first."
+      });
+      response.end();
+      return;
+    }
+
+    const topMatch = await getTopMatchSchool(parsed.data.query);
+
+    if (!topMatch) {
+      send("failed", {
+        message: "No top match available to enrich."
+      });
+      response.end();
+      return;
+    }
+
+    await enrichSchools([topMatch], (event: EnrichmentStreamEvent) => {
+      console.log(`[TINYFISH] ${event.type}: ${event.message}`);
+      send(event.type, event);
+    });
+
+    const result = await scout(parsed.data.query);
+    send("complete", {
+      message: "Top match enriched and recommendations refreshed.",
+      result
+    });
+    response.end();
+  } catch (error) {
+    send("failed", {
+      message:
+        error instanceof Error ? error.message : "Unable to enrich top match."
+    });
+    response.end();
   }
 });
 

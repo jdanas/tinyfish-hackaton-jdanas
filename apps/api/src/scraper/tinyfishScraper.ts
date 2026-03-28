@@ -9,6 +9,7 @@ import type { BaseSchool, EnrichedSchool } from "../types/school.js";
 export type EnrichmentStreamEvent =
   | { type: "status"; message: string }
   | { type: "progress"; message: string }
+  | { type: "preview"; message: string; streamingUrl: string }
   | { type: "complete"; message: string; enriched: number };
 
 type ScrapedEnrichment = {
@@ -100,6 +101,11 @@ async function scrapeSingleSchool(
       onStreamingUrl: (event) => {
         console.log("[TINYFISH] Live browser URL.", {
           school: school.name,
+          streamingUrl: event.streaming_url
+        });
+        onEvent?.({
+          type: "preview",
+          message: `${school.name}: live browser preview ready`,
           streamingUrl: event.streaming_url
         });
       },

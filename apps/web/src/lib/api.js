@@ -43,6 +43,38 @@ export function enrichTopMatch(query) {
         body: JSON.stringify({ query })
     });
 }
+export function streamEnrichTopMatch(query, handlers) {
+    const source = new EventSource(`/api/scout/enrich-top/live?query=${encodeURIComponent(query)}`);
+    source.addEventListener("status", (event) => {
+        handlers.onEvent(JSON.parse(event.data));
+    });
+    source.addEventListener("progress", (event) => {
+        handlers.onEvent(JSON.parse(event.data));
+    });
+    source.addEventListener("preview", (event) => {
+        handlers.onEvent(JSON.parse(event.data));
+    });
+    source.addEventListener("complete", (event) => {
+        const payload = JSON.parse(event.data);
+        handlers.onEvent(payload);
+        source.close();
+        handlers.onDone(payload.result);
+    });
+    source.addEventListener("failed", (event) => {
+        const payload = JSON.parse(event.data);
+        handlers.onEvent({
+            ...payload,
+            type: "failed"
+        });
+        source.close();
+        handlers.onError(payload.message);
+    });
+    source.onerror = () => {
+        source.close();
+        handlers.onError("Top match enrichment connection was interrupted.");
+    };
+    return () => source.close();
+}
 export function getSchools() {
     return request("/api/schools");
 }
@@ -52,6 +84,9 @@ export function streamEnrichmentLive(handlers) {
         handlers.onEvent(JSON.parse(event.data));
     });
     source.addEventListener("progress", (event) => {
+        handlers.onEvent(JSON.parse(event.data));
+    });
+    source.addEventListener("preview", (event) => {
         handlers.onEvent(JSON.parse(event.data));
     });
     source.addEventListener("complete", (event) => {

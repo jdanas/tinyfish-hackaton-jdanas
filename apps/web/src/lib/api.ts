@@ -48,9 +48,17 @@ export interface SchoolDebug {
 }
 
 export interface EnrichmentLiveEvent {
-  type: "status" | "progress" | "complete" | "failed";
+  type: "status" | "progress" | "preview" | "complete" | "failed";
   message: string;
   enriched?: number;
+  streamingUrl?: string;
+}
+
+export interface EnrichTopLiveEvent {
+  type: "status" | "progress" | "preview" | "complete" | "failed";
+  message: string;
+  streamingUrl?: string;
+  result?: ScoutResult;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -110,6 +118,53 @@ export function enrichTopMatch(query: string) {
   });
 }
 
+export function streamEnrichTopMatch(
+  query: string,
+  handlers: {
+    onEvent: (event: EnrichTopLiveEvent) => void;
+    onError: (message: string) => void;
+    onDone: (result?: ScoutResult) => void;
+  }
+) {
+  const source = new EventSource(`/api/scout/enrich-top/live?query=${encodeURIComponent(query)}`);
+
+  source.addEventListener("status", (event) => {
+    handlers.onEvent(JSON.parse((event as MessageEvent<string>).data) as EnrichTopLiveEvent);
+  });
+
+  source.addEventListener("progress", (event) => {
+    handlers.onEvent(JSON.parse((event as MessageEvent<string>).data) as EnrichTopLiveEvent);
+  });
+
+  source.addEventListener("preview", (event) => {
+    handlers.onEvent(JSON.parse((event as MessageEvent<string>).data) as EnrichTopLiveEvent);
+  });
+
+  source.addEventListener("complete", (event) => {
+    const payload = JSON.parse((event as MessageEvent<string>).data) as EnrichTopLiveEvent;
+    handlers.onEvent(payload);
+    source.close();
+    handlers.onDone(payload.result);
+  });
+
+  source.addEventListener("failed", (event) => {
+    const payload = JSON.parse((event as MessageEvent<string>).data) as EnrichTopLiveEvent;
+    handlers.onEvent({
+      ...payload,
+      type: "failed"
+    });
+    source.close();
+    handlers.onError(payload.message);
+  });
+
+  source.onerror = () => {
+    source.close();
+    handlers.onError("Top match enrichment connection was interrupted.");
+  };
+
+  return () => source.close();
+}
+
 export function getSchools() {
   return request<{ schools: SchoolDebug[] }>("/api/schools");
 }
@@ -128,6 +183,10 @@ export function streamEnrichmentLive(
   });
 
   source.addEventListener("progress", (event) => {
+    handlers.onEvent(JSON.parse((event as MessageEvent<string>).data) as EnrichmentLiveEvent);
+  });
+
+  source.addEventListener("preview", (event) => {
     handlers.onEvent(JSON.parse((event as MessageEvent<string>).data) as EnrichmentLiveEvent);
   });
 

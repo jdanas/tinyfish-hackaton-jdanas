@@ -2,7 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState } from "react";
 import { ResultCard } from "./components/ResultCard";
 import { SearchForm } from "./components/SearchForm";
-import { enrichTopMatch, refreshBase, scout, streamEnrichmentLive, } from "./lib/api";
+import { refreshBase, scout, streamEnrichTopMatch, streamEnrichmentLive, } from "./lib/api";
 import { parseSearchDraft } from "./lib/intent";
 const defaultDraft = {
     brief: "",
@@ -16,6 +16,8 @@ export default function App() {
     const [intentSummary, setIntentSummary] = useState("");
     const [lastDraft, setLastDraft] = useState(null);
     const [enrichmentEvents, setEnrichmentEvents] = useState([]);
+    const [topEnrichmentEvents, setTopEnrichmentEvents] = useState([]);
+    const [topPreviewUrl, setTopPreviewUrl] = useState(null);
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [enrichingTop, setEnrichingTop] = useState(false);
@@ -91,11 +93,32 @@ export default function App() {
         }
         setEnrichingTop(true);
         setError(null);
+        setTopEnrichmentEvents([]);
+        setTopPreviewUrl(null);
         try {
-            const response = await enrichTopMatch(results.query);
-            setResults(response.result);
+            await new Promise((resolve, reject) => {
+                const close = streamEnrichTopMatch(results.query, {
+                    onEvent: (event) => {
+                        setTopEnrichmentEvents((current) => [...current, event]);
+                        if (event.type === "preview" && event.streamingUrl) {
+                            setTopPreviewUrl(event.streamingUrl);
+                        }
+                    },
+                    onError: (message) => {
+                        close();
+                        reject(new Error(message));
+                    },
+                    onDone: (result) => {
+                        close();
+                        if (result) {
+                            setResults(result);
+                        }
+                        resolve();
+                    }
+                });
+            });
             setRefreshResult({
-                message: response.message
+                message: "Top match enriched and recommendations refreshed."
             });
         }
         catch (enrichError) {
@@ -120,5 +143,5 @@ export default function App() {
                                             ? `${backupRecommendation.name}: ${backupRecommendation.reason}`
                                             : "No backup recommendation yet." })] }), _jsx("button", { className: "secondary-button", disabled: enrichingTop || loading || refreshing || !leadRecommendation, onClick: () => void handleEnrichTopMatch(), type: "button", children: enrichingTop ? "Enriching top match..." : "Enrich top match" }), _jsx("p", { className: "action-note", children: leadRecommendation
                                     ? "Review the top recommendation first, then compare one backup only."
-                                    : "Try a more specific parent brief or refresh the data cache." })] }), _jsx("section", { className: "results-column", children: results.recommendations.map((listing) => (_jsx(ResultCard, { listing: listing }, `${listing.name}-${listing.address}`))) })] })) : (_jsxs("section", { className: "empty-state-card", children: [_jsx("p", { className: "eyebrow", children: "How it works" }), _jsx("h2", { children: "Describe the child\u2019s needs first. Kiaskool scouts the cache, not the live web." }), _jsx("p", { children: "ECDA base data fills the school cache. TinyFish adds website enrichment only during refresh. Search stays fast because the scout agent reads SQLite, not a live scrape." })] }))] }));
+                                    : "Try a more specific parent brief or refresh the data cache." }), topEnrichmentEvents.length > 0 ? (_jsxs("div", { className: "top-enrichment-panel", children: [_jsxs("div", { className: "top-enrichment-header", children: [_jsx("p", { className: "backup-label", children: "Live top-match enrichment" }), _jsxs("p", { children: [topEnrichmentEvents.length, " updates"] })] }), _jsx("div", { className: "top-enrichment-feed", children: topEnrichmentEvents.map((event, index) => (_jsxs("article", { className: `scrape-event scrape-${event.type}`, children: [_jsx("p", { className: "scrape-type", children: event.type }), _jsx("p", { className: "scrape-message", children: event.message })] }, `${event.type}-${index}-${event.message}`))) }), topPreviewUrl ? (_jsx("div", { className: "preview-frame-shell", children: _jsx("iframe", { className: "preview-frame", src: topPreviewUrl, title: "TinyFish live browser preview" }) })) : (_jsx("p", { className: "preview-placeholder", children: "Waiting for TinyFish live browser preview..." }))] })) : null] }), _jsx("section", { className: "results-column", children: results.recommendations.map((listing) => (_jsx(ResultCard, { listing: listing }, `${listing.name}-${listing.address}`))) })] })) : (_jsxs("section", { className: "empty-state-card", children: [_jsx("p", { className: "eyebrow", children: "How it works" }), _jsx("h2", { children: "Describe the child\u2019s needs first. Kiaskool scouts the cache, not the live web." }), _jsx("p", { children: "ECDA base data fills the school cache. TinyFish adds website enrichment only during refresh. Search stays fast because the scout agent reads SQLite, not a live scrape." })] }))] }));
 }

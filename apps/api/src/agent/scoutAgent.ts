@@ -244,3 +244,16 @@ export async function enrichTopMatch(query: string): Promise<ScoutResult> {
 
   return scout(query);
 }
+
+export async function getTopMatchSchool(query: string): Promise<BaseSchool | null> {
+  logScout("Resolving top match for enrichment.", { query });
+  const filters = await resolveFilters(query);
+  const matches = querySchools(filters);
+  const topMatch = matches[0];
+
+  if (!topMatch) {
+    return null;
+  }
+
+  return toBaseSchool(topMatch);
+}

@@ -2,10 +2,11 @@ import { useState } from "react";
 import { ResultCard } from "./components/ResultCard";
 import { SearchForm, type SearchDraft } from "./components/SearchForm";
 import {
-  enrichTopMatch,
   refreshBase,
   scout,
+  streamEnrichTopMatch,
   streamEnrichmentLive,
+  type EnrichTopLiveEvent,
   type EnrichmentLiveEvent,
   type RefreshBaseResponse,
   type ScoutResult,
@@ -29,6 +30,10 @@ export default function App() {
   const [enrichmentEvents, setEnrichmentEvents] = useState<
     EnrichmentLiveEvent[]
   >([]);
+  const [topEnrichmentEvents, setTopEnrichmentEvents] = useState<
+    EnrichTopLiveEvent[]
+  >([]);
+  const [topPreviewUrl, setTopPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [enrichingTop, setEnrichingTop] = useState(false);
@@ -115,12 +120,33 @@ export default function App() {
 
     setEnrichingTop(true);
     setError(null);
+    setTopEnrichmentEvents([]);
+    setTopPreviewUrl(null);
 
     try {
-      const response = await enrichTopMatch(results.query);
-      setResults(response.result);
+      await new Promise<void>((resolve, reject) => {
+        const close = streamEnrichTopMatch(results.query, {
+          onEvent: (event) => {
+            setTopEnrichmentEvents((current) => [...current, event]);
+            if (event.type === "preview" && event.streamingUrl) {
+              setTopPreviewUrl(event.streamingUrl);
+            }
+          },
+          onError: (message) => {
+            close();
+            reject(new Error(message));
+          },
+          onDone: (result) => {
+            close();
+            if (result) {
+              setResults(result);
+            }
+            resolve();
+          }
+        });
+      });
       setRefreshResult({
-        message: response.message
+        message: "Top match enriched and recommendations refreshed."
       });
     } catch (enrichError) {
       setError(
@@ -280,6 +306,38 @@ export default function App() {
                 ? "Review the top recommendation first, then compare one backup only."
                 : "Try a more specific parent brief or refresh the data cache."}
             </p>
+            {topEnrichmentEvents.length > 0 ? (
+              <div className="top-enrichment-panel">
+                <div className="top-enrichment-header">
+                  <p className="backup-label">Live top-match enrichment</p>
+                  <p>{topEnrichmentEvents.length} updates</p>
+                </div>
+                <div className="top-enrichment-feed">
+                  {topEnrichmentEvents.map((event, index) => (
+                    <article
+                      className={`scrape-event scrape-${event.type}`}
+                      key={`${event.type}-${index}-${event.message}`}
+                    >
+                      <p className="scrape-type">{event.type}</p>
+                      <p className="scrape-message">{event.message}</p>
+                    </article>
+                  ))}
+                </div>
+                {topPreviewUrl ? (
+                  <div className="preview-frame-shell">
+                    <iframe
+                      className="preview-frame"
+                      src={topPreviewUrl}
+                      title="TinyFish live browser preview"
+                    />
+                  </div>
+                ) : (
+                  <p className="preview-placeholder">
+                    Waiting for TinyFish live browser preview...
+                  </p>
+                )}
+              </div>
+            ) : null}
           </aside>
 
           <section className="results-column">
